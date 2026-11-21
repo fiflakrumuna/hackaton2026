@@ -1,7 +1,7 @@
 @echo off
 REM Odwolania2json - uruchomienie na Windows
-REM   start.bat        -> przetwarza PDF-y z .\input i zapisuje JSON-y do .\output
-REM   start.bat gui    -> otwiera aplikacje w przegladarce (http://localhost:8501)
+REM   start.bat        -> (dwuklik) otwiera aplikacje w przegladarce (http://localhost:8501)
+REM   start.bat batch  -> przetwarza PDF-y z .\input i zapisuje JSON-y do .\output
 setlocal
 cd /d "%~dp0"
 
@@ -26,11 +26,13 @@ if errorlevel 1 (
 if not exist "input" mkdir input
 if not exist "output" mkdir output
 
-if /i "%~1"=="gui" (
-    echo [3/3] Uruchamiam aplikacje: http://localhost:8501   zamkniecie: Ctrl+C
-    ".venv\Scripts\python.exe" -m streamlit run app.py
-) else (
+if /i "%~1"=="batch" (
     echo [3/3] Przetwarzam .\input do .\output ...
     ".venv\Scripts\python.exe" main.py -i input -o output
+) else (
+    echo [3/3] Uruchamiam aplikacje: http://localhost:8501   zamkniecie: zamknij to okno
+    REM przegladarka otwiera sie po kilku sekundach, gdy serwer juz wystartuje
+    start "" cmd /c "timeout /t 5 >nul & start http://localhost:8501"
+    ".venv\Scripts\python.exe" -m streamlit run app.py --server.headless true --server.port 8501 --browser.gatherUsageStats false
 )
 endlocal
