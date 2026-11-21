@@ -1,0 +1,45 @@
+# Konfiguracja warstwy wejściowej (PDF + OCR) – Odwołania2json
+# Każdy klucz można też nadpisać zmienną środowiskową PDF_INGEST_<KLUCZ>, np. PDF_INGEST_WORKERS=4
+ingest:
+  # --- detekcja: warstwa tekstowa vs skan (liczona osobno dla każdej strony) ---
+  min_text_chars: 40            # mniej znaków => strona to skan
+  min_text_quality: 0.55        # 0..1, poniżej => warstwa tekstowa to "krzaki" -> OCR
+  image_coverage_scan: 0.6      # obraz pokrywa >= 60% strony => strona wygląda na skan
+  reocr_scanned_text_layer: auto  # auto | always | never (skan z warstwą OCR ze skanera)
+
+  # --- priorytet stron (kluczowe dane są zwykle na 1-3 stronie) ---
+  priority_pages: 4             # pierwsze N stron skanu OCR-ujemy zawsze
+  tail_pages: 1                 # + ostatnie K (podpisy, daty, lista załączników)
+  ocr_remaining: budget         # all | budget | none - co z resztą stron skanu
+  time_budget_s: 45             # limit czasu na dokument dla stron spoza priorytetu
+
+  # --- silnik OCR ---
+  engine: auto                  # auto (tesseract -> rapidocr) | tesseract | rapidocr
+  lang: pol
+  dpi: 300
+  max_long_side_px: 3508        # limit renderu (A4 @ 300 DPI)
+  layout: rows                  # rows = kolejność z geometrii (etykiety "Odwołujący:" z lewej kolumny)
+  workers: 0                    # 0 = liczba rdzeni (max 8)
+  tesseract_cmd: null           # np. "C:/Program Files/Tesseract-OCR/tesseract.exe" (null = autodetekcja)
+  tessdata_dir: null            # np. "models/tessdata" z pol.traineddata z tessdata_best
+  tesseract_psm: 3
+  retry_low_confidence: 0.70    # niższa pewność => druga próba (CLAHE + binaryzacja adaptacyjna)
+  keep_words: true              # słowa z bbox i pewnością w wyniku (podświetlanie w GUI)
+  low_conf_word_threshold: 0.6
+
+  # --- preprocessing krzywych skanów ---
+  detect_orientation: true      # 90/180/270 (OSD odpalane tylko gdy potrzeba)
+  osd_trigger_confidence: 0.65
+  osd_trigger_vertical: 0.35
+  deskew: true
+  max_skew_deg: 15
+  denoise: auto                 # auto | always | never
+  normalize_background: auto    # auto | always | never (cienie, szare tło)
+  remove_dot_leaders: true      # "KWOTA ........ 34,00 PLN"
+  remove_redactions: true       # czarne pola anonimizacji -> białe; ciemne paski z tekstem -> odwrócone
+
+  # --- postprocessing tekstu ---
+  dehyphenate: true
+  fix_ocr_digits: true          # O->0, l->1 w NIP/KRS/REGON/PESEL/rachunkach
+
+  cache_dir: .cache/ingest      # wyniki po sha256 pliku (null = bez cache)

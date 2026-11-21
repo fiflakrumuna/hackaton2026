@@ -1,0 +1,111 @@
+id: pelnomocnictwo
+title: Pełnomocnictwo
+description: >
+  Dokument, w którym mocodawca (wykonawca, osoba prawna lub fizyczna; przy konsorcjum kilku)
+  ustanawia pełnomocników do reprezentowania go w postępowaniu odwoławczym przed KIO.
+
+classification:
+  min_score: 3
+  filename_patterns: ['pe[lł]nomoc']
+  filename_weight: 2
+  keywords:
+    - {pattern: '(?-i:PEŁNOMOCNICTWO)', weight: 3}
+    - {pattern: 'udziela\w*\s+(?:dalszego\s+)?pełnomocnictwa|ustanawia\w*\s+pełnomocnik|Mocodawc', weight: 2}
+    - {pattern: 'Pełnomocnictwo\s+przyjmuję|umocowan', weight: 1}
+  negative_keywords:
+    - {pattern: '(?-i:\bODWOŁANIE\b)', weight: 3}
+    - {pattern: 'Zarzut\w*\s+nr', weight: 2}
+
+schema:
+  mocodawca:
+    type: list
+    description: "Podmiot(y) udzielające pełnomocnictwa (przy konsorcjum – każdy członek osobno)."
+    scope:                      # przy konsorcjum zawężamy do listy członków; inaczej cały dokument
+      start: 'Konsorcj\w*\)?\s*:'
+      end: '\(dalej|reprezentowan\w*\s+przez|udziela\w*\s+pełnomocnictwa'
+    split: '(?=(?<![\w.])\d\)\s*(?-i:[A-ZĄĆĘŁŃÓŚŹŻ]))'
+    items:
+      type: object
+      fields:
+        data:
+          type: object
+          fields:
+            imie_nazwisko:
+              type: string
+              description: "Imię i nazwisko mocodawcy – TYLKO gdy jest osobą fizyczną (np. przedsiębiorca z CEIDG); dla osoby prawnej null."
+              normalize: [person_name]
+              rules:
+                - regex: 'niżej\s+podpisan\w*\s+(?P<v>(?-i:[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?))'
+            krs:
+              type: string
+              description: "KRS mocodawcy (osoba prawna)."
+              normalize: [krs]
+              rules: [{regex: 'KRS\s*:?\s*(?P<v>\d{10})'}]
+            nazwa:
+              type: string
+              description: "Pełna nazwa (firma) mocodawcy."
+              # usuwa nagłówek "Miasto, data PEŁNOMOCNICTWO [PROCESOWE]" przyklejony do nazwy
+              normalize: [{regex_replace: {pattern: '^.*?PEŁNOMOCNICTWO(?:\s+PROCESOWE)?\s+', flags: i}}, company_name]
+              rules:
+                # kolejność = od najbardziej jednoznacznych szablonów
+                - regex: 'Mocodawcą\s+jest\s+(?P<v>.+?)\s*,\s*(?:z\s+siedzibą|ul\.|al\.|pl\.|os\.)'
+                - regex: 'pod\s+firmą\s+(?P<v>.+?)\s*,\s*(?:ul\.|al\.|pl\.|os\.)'
+                - regex: 'reprezentacji\s+(?P<v>.+?)\s*\((?:KRS|NIP)'
+                - regex: 'Działając\s+w\s+imieniu\s+(?P<v>.+?)\s*(?:\(dalej|,\s*(?:z\s+siedzibą|wpisan|ul\.))'
+                - regex: '(?-i:M(?:ocodawca|OCODAWCA))\s+(?P<v>(?-i:[A-ZĄĆĘŁŃÓŚŹŻ]).+?)\s*,?\s*(?:ul\.|al\.|pl\.|os\.)'
+                - regex: '(?-i:PEŁNOMOCNICTWO)(?:\s+(?-i:PROCESOWE))?\s+(?P<v>(?-i:[A-ZĄĆĘŁŃÓŚŹŻ])[^,()]{2,120}?)\s+(?:z\s+siedzibą|\(KRS)'
+                - regex: '^\s*(?:\d\)\s*)?(?P<v>(?-i:[A-ZĄĆĘŁŃÓŚŹŻ]).{2,120}?)\s*,?\s*(?:ul\.|al\.|pl\.|os\.)'
+                  name: "regex:pierwsza_linia"
+                - regex: '(?P<v>(?-i:[A-ZĄĆĘŁŃÓŚŹŻ])[^,()]{2,100}?)\s+z\s+siedzibą'
+            nip:
+              type: string
+              description: "NIP mocodawcy."
+              normalize: [nip]
+              validate: [nip_checksum]
+              rules: [{regex: 'NIP\s*:?\s*(?:PL)?\s*(?P<v>\d[\d -]{8,12}\d)'}]
+            typ:
+              type: enum
+              values: [osoba_prawna, osoba_fizyczna]
+              description: "'osoba_prawna' (spółka, instytucja) lub 'osoba_fizyczna' (np. jednoosobowa działalność)."
+              normalize: [text, lower]
+              rules:
+                - {regex: '(?P<v>niżej\s+podpisan\w*\s+[A-ZĄĆĘŁŃÓŚŹŻ]\w+\s+[A-ZĄĆĘŁŃÓŚŹŻ]\w+\s*,\s*prowadząc|Centralnej\s+Ewidencji|CEIDG)', value: osoba_fizyczna}
+                - {const: osoba_prawna}
+        podpisujacy:
+          type: list
+          description: "Osoby podpisujące pełnomocnictwo w imieniu mocodawcy (bez pełnomocników przyjmujących)."
+          # nazwisko tuż po linii kropek; pomijamy prefiks "Za <firma>"; osoby z tytułem
+          # (adw./r. pr.) to pełnomocnicy przyjmujący – nie pasują, bo tytuł zaczyna się małą literą
+          findall:
+            regex: '\.{3,}\s*(?:Za\s+.{2,120}?(?:S\.A\.|o\.\s?o\.|sp\.\s?[kjp]\.|s\.c\.)\s+)?(?P<v>(?-i:[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?))'
+            field: imie_nazwisko
+          items:
+            type: object
+            fields:
+              imie_nazwisko:
+                type: string
+                description: "Imię i nazwisko osoby podpisującej (mianownik, bez funkcji)."
+                normalize: [person_name]
+
+  pelnomocnicy:
+    type: list
+    description: "Osoby ustanowione pełnomocnikami."
+    # pełnomocnik = osoba z tytułem zawodowym (adw./r. pr.); duplikaty z sekcji
+    # "Pełnomocnictwo przyjmuję" są usuwane automatycznie
+    findall:
+      regex: '(?:r\.\s*pr\.|adw\.|radc\w+\s+prawn\w+|adwokat\w*|mec\.|apl\.\s*(?:radc|adw)\.)\s*(?P<v>(?-i:[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?))'
+      field: imie_nazwisko
+    items:
+      type: object
+      fields:
+        imie_nazwisko:
+          type: string
+          description: "Imię i nazwisko pełnomocnika w mianowniku (bez tytułu r. pr./adw.)."
+          normalize: [person_name]
+        pesel:
+          # UWAGA: w danych referencyjnych UZP PESEL jest STRINGIEM ("85071204278"),
+          # mimo że oczekiwane-json/pelnomocnictwo.json pokazuje liczbę.
+          type: string
+          description: "PESEL pełnomocnika (11 cyfr) – tylko jeśli podany."
+          normalize: [pesel]
+          validate: [pesel_checksum]

@@ -1,0 +1,16 @@
+PyYAML>=6.0
+pydantic>=2.6
+pypdf>=4.0          # fallback, gdy brak poppler (pdftotext)
+scipy>=1.11         # dopasowanie list w ewaluacji (algorytm węgierski); bez niego działa wariant zachłanny
+numpy>=1.26
+pytest>=8.0         # testy
+# OCR: domyślny fallback używa Tesseract CLI (+ pakiet języka 'pol') i pdftoppm (poppler).
+# Docelowy moduł OCR (Osoba 1) może dodać tu np. rapidocr-onnxruntime.
+streamlit>=1.38.0
+# pdf_ingest (OCR, Osoba 1)
+pypdfium2>=4.30
+opencv-python-headless>=4.9
+pillow>=10.0
+pytesseract>=0.3.10
+# python/api_test.py (Osoba 2)
+requests>=2.31
