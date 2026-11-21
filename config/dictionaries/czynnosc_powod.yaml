@@ -1,0 +1,44 @@
+# Słownik powodów odwołania (czynnosc_powod_id -> czynnosc_opis).
+# Etykiety 1-11 potwierdzone w danych treningowych UZP (dokładne brzmienie z oczekiwanych JSON-ów).
+# `patterns` – regexy dla ekstraktora regułowego (szukane w zdaniu "Zamawiający w dniu ... <czynność>").
+# Wygrywa wzorzec, który dopasuje się NAJWCZEŚNIEJ w tekście (dlatego "nie odrzucił" > "odrzucił").
+id: czynnosc_powod
+entries:
+  - id: 1
+    label: "Decyzja o odrzuceniu oferty"
+    patterns: ['poinformował\w* o odrzuceniu', '(?<!nie )odrzucił\w* ofert', 'odrzuceni\w+ oferty (?:złożonej przez )?Odwołując']
+  - id: 2
+    label: "Ogłoszenie wyboru oferty"
+    patterns: ['ogłosił\w* wybór', 'dokonał\w* wyboru oferty', 'wybrał\w* ofert']
+  - id: 3
+    label: "Decyzja o wykluczeniu wykonawcy"
+    patterns: ['poinformował\w* o wykluczeniu', '(?<!nie )wykluczył\w*']
+  - id: 4
+    label: "Publikacja specyfikacji warunków zamówienia (SWZ)"
+    patterns: ['opublikował\w* (?:Specyfikacj|SWZ)', 'udostępnił\w* (?:Specyfikacj|SWZ)', 'publikacj\w* (?:SWZ|specyfikacji)']
+  - id: 5
+    label: "Modyfikacja treści SWZ"
+    patterns: ['zmodyfikował\w*', 'zmienił\w* treść (?:SWZ|Specyfikacji)', 'modyfikacj\w* treści']
+  - id: 6
+    label: "Odpowiedzi i wyjaśnienia do SWZ"
+    patterns: ['odpowiedzi i wyjaśnienia', 'udzielił\w* odpowiedzi', 'wyjaśnie\w+ treści (?:SWZ|Specyfikacji)']
+  - id: 7
+    label: "Zaniechanie odrzucenia oferty"
+    patterns: ['nie odrzucił', 'zaniechał\w* odrzucenia', 'zaniechani\w+ odrzucenia']
+  - id: 8
+    label: "Zaniechanie wykluczenia wykonawcy"
+    patterns: ['nie wykluczył', 'zaniechał\w* wykluczenia', 'zaniechani\w+ wykluczenia']
+  - id: 9
+    label: "Decyzja o unieważnieniu postępowania"
+    patterns: ['unieważni+ł\w* postępowanie', 'o unieważnieniu postępowania']
+  - id: 10
+    label: "Zaniechanie unieważnienia postępowania"
+    # w danych treningowych "przekazał informację o wyborze oferty" był oznaczany jako 10
+    patterns: ['zaniechał\w* unieważnienia', 'nie unieważnił', 'przekazał\w* informacj\w* o wyborze oferty']
+  - id: 11
+    label: "Opis przedmiotu zamówienia (OPZ)"
+    patterns: ['Opis\w* Przedmiotu Zamówienia', '\bOPZ\b']
+  - id: 12
+    # TODO: brak przykładu w zbiorze treningowym – dopytać mentorów UZP o brzmienie etykiety
+    label: "Inna czynność lub zaniechanie zamawiającego"
+    patterns: []

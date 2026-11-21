@@ -1,0 +1,90 @@
+"""SZKIELET ekstraktora LLM dla Osoby 2 – API zgodne z OpenAI (/chat/completions).
+
+Nie testowany z prawdziwym API (brak klucza w środowisku autora). Pokazuje kontrakt:
+prompt i schemat JSON są generowane z YAML, więc nowy typ dokumentu / nowe pole
+nie wymaga zmian w tym pliku. Włączenie w settings.yaml:
+
+    extractors:
+      - {class: odw2json.extract_llm:LLMExtractor}
+      - {class: odw2json.extract_rules:RuleExtractor}
+
+Wynik przechodzi potem przez tę samą normalizację co reguły (postprocess.py),
+więc LLM nie musi idealnie trzymać formatu dat/kwot/NIP-ów.
+"""
+from __future__ import annotations
+
+import json
+import re
+import urllib.request
+
+from .config import AppConfig, DocumentType
+from .document import ExtractedDocument, ExtractionResult
+from .schema_builder import empty_instance, field_guide, json_schema
+
+SYSTEM = (
+    "Jesteś precyzyjnym systemem ekstrakcji danych z polskich dokumentów zamówień publicznych. "
+    "Zwracasz WYŁĄCZNIE poprawny JSON. Nie zgaduj: jeśli informacji nie ma w tekście, wpisz null. "
+    "Wartości przepisuj dosłownie z dokumentu (nazwy firm z formą prawną, np. 'sp. z o.o.')."
+)
+
+
+class LLMExtractor:
+    name = "llm"
+
+    def __init__(self, cfg: AppConfig, max_chars: int = 12000, with_evidence: bool = True, use_json_schema: bool = False, **opts):
+        llm = {**(cfg.get("llm", {}) or {}), **opts}
+        self.base_url = (llm.get("base_url") or "").rstrip("/")
+        self.api_key = llm.get("api_key") or ""
+        self.model = llm.get("model") or ""
+        self.temperature = float(llm.get("temperature", 0))
+        self.timeout = float(llm.get("timeout_s", 60))
+        self.max_chars = max_chars
+        self.with_evidence = with_evidence
+        self.use_json_schema = use_json_schema
+
+    def build_messages(self, doc: ExtractedDocument, dt: DocumentType) -> list[dict]:
+        skeleton = json.dumps(empty_instance(dt), ensure_ascii=False, indent=1)
+        hint = (dt.llm or {}).get("system_hint", "")
+        ev = ('\nDodatkowo zwróć klucz "zrodla": {"ścieżka.pola": "dosłowny cytat z dokumentu"} dla każdego '
+              'wypełnionego pola. Format odpowiedzi: {"dane": <JSON wg szablonu>, "zrodla": {...}}') if self.with_evidence else ""
+        user = (f"Typ dokumentu: {dt.title}. {dt.description}\n{hint}\n\nPola do wypełnienia:\n{field_guide(dt)}\n\n"
+                f"Szablon JSON (zachowaj dokładnie te klucze):\n{skeleton}{ev}\n\n"
+                f"DOKUMENT:\n<<<\n{doc.text[: self.max_chars]}\n>>>")
+        return [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
+
+    def extract(self, doc: ExtractedDocument, dt: DocumentType) -> ExtractionResult:
+        if not (self.base_url and self.model):
+            return ExtractionResult(data={}, method=self.name, error="LLM nie skonfigurowany (llm.base_url / llm.model)")
+        body = {"model": self.model, "temperature": self.temperature, "messages": self.build_messages(doc, dt)}
+        if self.use_json_schema:
+            body["response_format"] = {"type": "json_schema", "json_schema": {
+                "name": dt.id, "schema": json_schema(dt, with_evidence=self.with_evidence)}}
+        else:
+            body["response_format"] = {"type": "json_object"}
+        req = urllib.request.Request(f"{self.base_url}/chat/completions", data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"})
+        with urllib.request.urlopen(req, timeout=self.timeout) as r:
+            content = json.loads(r.read())["choices"][0]["message"]["content"]
+        parsed = _parse_json(content)
+        data = parsed.get("dane", parsed) if self.with_evidence else parsed
+        evidence = {}
+        for path, quote in (parsed.get("zrodla") or {}).items():
+            if isinstance(quote, str) and quote.strip():
+                # weryfikacja cytatu: czy naprawdę występuje w dokumencie (ochrona przed halucynacją)
+                found = _norm(quote)[:80] in _norm(doc.text)
+                evidence[path] = {"quote": quote[:300], "page": doc.find_page(quote), "method": "llm", "verified": found}
+        return ExtractionResult(data=data, evidence=evidence, method=self.name)
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"\s+", " ", s).strip().lower()
+
+
+def _parse_json(s: str) -> dict:
+    s = s.strip()
+    s = re.sub(r"^```(?:json)?\s*|\s*```$", "", s)
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        m = re.search(r"\{.*\}", s, re.S)
+        return json.loads(m.group(0)) if m else {}

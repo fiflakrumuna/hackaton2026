@@ -1,0 +1,67 @@
+id: przelew
+title: Potwierdzenie przelewu
+description: >
+  Potwierdzenie wykonania przelewu bankowego (wpis od odwołania lub opłata skarbowa od pełnomocnictwa).
+
+classification:
+  min_score: 3
+  filename_patterns: ['przelew', 'wp[lł]at', 'potwierdz']
+  filename_weight: 2
+  keywords:
+    - {pattern: 'potwierdzeni\w+\s+(?:wykonania\s+|realizacji\s+)?(?:polecenia\s+)?przelewu|polecenie\s+przelewu|potwierdzenie\s+przelewu', weight: 3}
+    - {pattern: 'rachun\w+\s+(?:odbiorcy|nadawcy|obciążan|uznawan|zleceniodawcy|beneficjenta)|z\s+rachunku', weight: 1}
+    - {pattern: 'Nr\s+ref|Numer\s+referencyjny|Numer\s+transakcji', weight: 1}
+    - {pattern: 'Kwota|w\s+kwocie', weight: 1}
+  negative_keywords:
+    - {pattern: '(?-i:\bODWOŁANIE\b)', weight: 3}
+    - {pattern: '(?-i:PEŁNOMOCNICTWO)', weight: 3}
+
+schema:
+  przelew_bankowy:
+    type: object
+    fields:
+      data_operacji:
+        type: date
+        description: "Data wykonania/realizacji operacji (nie data wydruku)."
+        validate: [iso_date]
+        rules:
+          - regex: 'Kwota(?:\s+\w+)?\s+Data\s+\w+\s*:?\s*(?:PLN\s*)?(?:\d{1,3}(?:[ \u00a0.]\d{3})+|\d+)[,.]\d{2}\s*(?:PLN|zł)?\s+(?P<v>\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4})'
+            name: "regex:uklad_tabelaryczny"
+          - regex: '(?:Data\s+(?:operacji|transakcji|realizacji|wykonania|księgowania|zlecenia)|DATA\s+REALIZACJI)\s*[:.\s]*(?P<v>\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4})'
+          - regex: 'w\s+dniu\s+(?P<v>\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4})'
+      kwota:
+        type: number
+        description: "Kwota przelewu jako liczba (kropka dziesiętna), bez waluty."
+        validate: [positive]
+        rules:
+          - regex: 'Kwota(?:\s+\w+)?\s+Data\s+\w+\s*:?\s*(?:PLN\s*)?(?P<v>(?:\d{1,3}(?:[ \u00a0.]\d{3})+|\d+)[,.]\d{2})'
+            name: "regex:uklad_tabelaryczny"
+          - regex: '(?:Kwota(?:\s+operacji|\s+przelewu)?|Wartość|w\s+kwocie)\s*[:.\s]*(?:PLN\s*)?(?P<v>(?:\d{1,3}(?:[ \u00a0.]\d{3})+|\d+)[,.]\d{2})'
+      na_rachunek:
+        type: string
+        description: "Numer rachunku ODBIORCY (26 cyfr, bez 'PL' i spacji)."
+        normalize: [account]
+        validate: [nrb_checksum]
+        rules:
+          - regex: '(?:na\s+rachunek(?:\s+nr)?|Rachunek\s+(?:odbiorcy|uznawany|beneficjenta|ma)|Konto\s+odbiorcy)\s*:?\s*(?P<v>(?:PL\s?)?\d{2}(?:\s?\d{4}){6})'
+          - {regex: '(?P<v>(?:PL\s?)?\d{2}(?:\s?\d{4}){6})', nth: 1, name: "regex:drugi_rachunek"}
+      numer_transakcji:
+        type: string
+        description: "Numer referencyjny / identyfikator transakcji."
+        normalize: [text, upper, strip_trailing_punct]
+        rules:
+          - regex: '(?:Nr\s+ref\.?|Numer\s+referencyjny(?:\s+operacji)?|Numer\s+transakcji(?:\s+operacji)?|Identyfikator\s+(?:transakcji|operacji)|ID\s+transakcji)\s*[:.\s]*(?P<v>[A-Z0-9][A-Z0-9/-]{7,})'
+      tytul:
+        type: string
+        description: "Tytuł przelewu (pełny tekst, jedna linia)."
+        normalize: [text, strip_quotes, smart_trailing_punct, strip_quotes]
+        rules:
+          - regex: '(?:Tytułem|Tytuł(?:\s+przelewu)?|(?-i:Opis|OPIS)(?:\s+operacji)?)\s*:?\s*[„"]?(?P<v>.+?)[”"]?\s*\.?\s*(?=Nr\s+ref|Identyfikator|Numer\s+(?:referencyjny|transakcji)|Typ\s+operacji|Status|Kanał|Waluta|Data\s|Kwota|Bank\s+nie\s+ponosi|Opłata|Dokument\s+wygenerowany|Potwierdzenie\s+ma|ZREALIZOWANO|$)'
+      z_rachunku:
+        type: string
+        description: "Numer rachunku NADAWCY/płatnika (26 cyfr, bez 'PL' i spacji)."
+        normalize: [account]
+        validate: [nrb_checksum]
+        rules:
+          - regex: '(?:z\s+rachunku(?:\s+nr)?|Rachunek\s+(?:obciążany|nadawcy|zleceniodawcy|płatnika|winien)|Konto\s+nadawcy)\s*:?\s*(?P<v>(?:PL\s?)?\d{2}(?:\s?\d{4}){6})'
+          - {regex: '(?P<v>(?:PL\s?)?\d{2}(?:\s?\d{4}){6})', nth: 0, name: "regex:pierwszy_rachunek"}

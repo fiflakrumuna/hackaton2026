@@ -1,0 +1,46 @@
+# Ustawienia globalne odw2json.
+# Wartości ${ZMIENNA:-domyślna} są czytane ze zmiennych środowiskowych (klucze API poza repo).
+
+pipeline:
+  # Osoba 1 podmienia na swój moduł z OCR, np. {class: ocr.engine:HybridExtractor, options: {...}}
+  text_extractor:
+    class: odw2json.text:PdfTextExtractor
+    options:
+      max_pages: 6            # kluczowe dane są na pierwszych stronach
+
+  # Osoba 2 może podpiąć klasyfikator LLM (np. jako fallback przy niskiej pewności)
+  classifier:
+    class: odw2json.classify:RuleClassifier
+    options:
+      head_chars: 3500
+      use_filename: true
+
+  # Kolejność = priorytet przy scalaniu (pierwsza niepusta wartość wygrywa,
+  # chyba że pole w YAML ma `prefer: [...]`). Dopisz LLM na początku listy:
+  #   - {class: llm.extractor:LLMExtractor, options: {model: "${LLM_MODEL:-bielik-11b}"}}
+  extractors:
+    - class: odw2json.extract_rules:RuleExtractor
+
+llm:                          # wspólne ustawienia dla modułu Osoby 2
+  base_url: ${LLM_BASE_URL:-}
+  api_key: ${LLM_API_KEY:-}
+  model: ${LLM_MODEL:-}
+  temperature: 0
+  timeout_s: 60
+
+output:
+  indent: 2
+  negative: empty_file        # empty_file (wymóg README UZP) | empty_object
+  audit_dir: null             # np. "audit" -> cytaty źródłowe i ostrzeżenia dla UI
+
+evaluation:
+  # nazwy plików w dane/ różnią się od nazw PDF: potwierdzenie_przelewu.pdf <-> przelew.json
+  gt_to_pdf_stem:
+    przelew: potwierdzenie_przelewu
+  # jakie typy pliku GT oznaczają który typ dokumentu (do raportu per typ)
+  gt_doc_type:
+    odwolanie: odwolanie
+    pelnomocnictwo: pelnomocnictwo
+    przelew: przelew
+
+# disabled_document_types: [przelew]   # szybkie wyłączenie typu bez kasowania pliku
