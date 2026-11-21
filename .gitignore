@@ -1,3 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+output/
+audit/
+eval_runs/
+.env
 .env
 .idea/
 .venv/

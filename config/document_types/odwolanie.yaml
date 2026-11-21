@@ -1,0 +1,213 @@
+# Typ dokumentu: ODWOŁANIE do Prezesa KIO.
+# Struktura `schema` = struktura wyjściowego JSON (kolejność kluczy zachowana).
+# Każde pole:
+#   type:        string | integer | number | date | enum | boolean_int | object | list
+#   description: opis -> trafia do promptu LLM i do UI
+#   normalize:   łańcuch normalizatorów (odw2json/normalize.py)
+#   validate:    walidatory (tylko ostrzeżenia, chyba że on_invalid: null)
+#   rules:       reguły ekstraktora regułowego (regex/const/dictionary)
+#   derive:      pole wyliczane z innych pól
+#   prefer:      kolejność ekstraktorów dla tego pola, np. [rules, llm]
+id: odwolanie
+title: Odwołanie do KIO
+description: >
+  Pismo wykonawcy (Odwołującego) do Prezesa Krajowej Izby Odwoławczej zaskarżające
+  czynność lub zaniechanie Zamawiającego w postępowaniu o udzielenie zamówienia publicznego.
+
+classification:
+  min_score: 3
+  filename_patterns: ['odwo[lł]a']
+  filename_weight: 2
+  keywords:
+    - {pattern: '(?-i:\bODWOŁANIE\b)', weight: 3}
+    - {pattern: 'Odwołując\w*\s*(?:\([^)]*\))?\s*:', weight: 2}
+    - {pattern: 'Prezes\w* Krajowej Izby Odwoławczej|Krajowa Izba Odwoławcza', weight: 1}
+    - {pattern: 'Zarzut\w*\s+nr', weight: 1}
+    - {pattern: 'art\.\s*513', weight: 1}
+
+llm:
+  system_hint: >
+    Dane strony (Odwołujący, Zamawiający) są zwykle w nagłówku pisma. Datę i miejscowość bierz
+    WYŁĄCZNIE z linii nagłówka typu "Miasto, dnia ..." – jeśli jej brak, zwróć null.
+
+schema:
+  OdwolanieKIO:
+    type: object
+    fields:
+      data:
+        type: date
+        description: "Data pisma z nagłówka pierwszej strony (linia 'Miejscowość, dnia DD.MM.RRRR'). Brak takiej linii -> null."
+        validate: [iso_date]
+        rules:
+          - regex: '^\s*[A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż-]+(?:[ -][A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż-]+)?\s*,?\s*(?:dnia\s+|dn\.\s*)?(?P<v>\d{1,2}\.\d{1,2}\.\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4})'
+            source: raw
+            flags: m
+            before: 'Działając\s+w\s+imieniu|wnoszę\s+o|Zarzut\w*\s+nr'
+      czynnosc_dzien:
+        type: date
+        description: "Data czynności/zaniechania Zamawiającego, od której liczy się termin na odwołanie (dla PIERWSZEGO zarzutu)."
+        validate: [iso_date]
+        rules:
+          - dictionary: {name: czynnosc_powod, anchor: 'Zamawiający\s+w\s+dniu\s+(?P<v>\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4}|\d{1,2}\.\d{1,2}\.\d{4}|\d{4}-\d{2}-\d{2})', window: 300, sentence: true, anchor_required: true, return: anchor}
+            name: "slownik:zdanie_z_czynnoscia"
+          - regex: 'Zamawiający\s+w\s+dniu\s+(?P<v>\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4}|\d{1,2}\.\d{1,2}\.\d{4}|\d{4}-\d{2}-\d{2})'
+          - regex: 'w\s+dniu\s+(?P<v>\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4}|\d{1,2}\.\d{1,2}\.\d{4}|\d{4}-\d{2}-\d{2})\s*(?:r\.|roku)?\s*Zamawiający'
+          - regex: 'dniu\s+(?P<v>\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4}|\d{1,2}\.\d{1,2}\.\d{4})\s*(?:r\.|roku)?[^.]{0,80}(?:poinformował|opublikował|zamieścił|przekazał|udostępnił)'
+      czynnosc_powod_id:
+        type: integer
+        description: "Identyfikator powodu odwołania 1-12 wg słownika czynnosc_powod, ustalany WYŁĄCZNIE na podstawie pierwszego zarzutu / zaskarżonej czynności."
+        normalize: [{lookup: {dictionary: czynnosc_powod}}]
+        llm: {hint: "Wybierz id ze słownika: 1 odrzucenie oferty, 2 wybór oferty, 3 wykluczenie, 4 publikacja SWZ, 5 modyfikacja SWZ, 6 odpowiedzi/wyjaśnienia SWZ, 7 zaniechanie odrzucenia, 8 zaniechanie wykluczenia, 9 unieważnienie, 10 zaniechanie unieważnienia, 11 OPZ."}
+        rules:
+          - dictionary: {name: czynnosc_powod, field: id, anchor: 'Zamawiający\s+w\s+dniu', window: 300, sentence: true, anchor_required: true}
+          - dictionary: {name: czynnosc_powod, field: id, anchor: 'Zarzut\w*\s+nr\s*1', window: 300}
+      czynnosc_opis:
+        type: string
+        description: "Kanoniczny opis czynności – zawsze etykieta ze słownika dla czynnosc_powod_id."
+        derive:
+          mode: override          # zawsze ze słownika -> 100% spójności z id
+          lookup: {dictionary: czynnosc_powod, from: czynnosc_powod_id, field: label}
+      miejscowosc:
+        type: string
+        description: "Miejscowość z linii nagłówka 'X, dnia ...' / 'X DD.MM.RRRR'. Brak -> null."
+        rules:
+          - regex: '^\s*(?P<v>[A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż-]+(?:[ -][A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż-]+)?)\s*,?\s*(?:dnia\s+|dn\.\s*)?(?:\d{1,2}\.\d{1,2}\.\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4})'
+            source: raw
+            flags: m
+            before: 'Działając\s+w\s+imieniu|wnoszę\s+o|Zarzut\w*\s+nr'
+
+  Odwolujacy:
+    type: list
+    description: "Wykonawca wnoszący odwołanie (przy konsorcjum – Lider)."
+    scope:
+      start: '(?-i:Odwołując\w*)\s*(?:\([^)]*\))?\s*:'
+      end: '(?-i:\bZamawiając\w*\s*(?:\(|:)|\bdotyczy\s*:|\bODWOŁANIE\b|Prezes\w* Krajowej|Krajowa Izba)'
+      required: true
+    items:
+      type: object
+      fields:
+        krs:
+          type: string
+          description: "KRS Odwołującego (lub Lidera konsorcjum), 10 cyfr."
+          normalize: [krs]
+          validate: [krs_format]
+          rules: [{regex: 'KRS\s*:?\s*(?:nr\s*)?(?P<v>\d{10})'}]
+        nazwa:
+          type: string
+          description: "Pełna nazwa Odwołującego (przy konsorcjum – nazwa Lidera)."
+          normalize: [company_name]
+          rules:
+            - regex: 'Lider\w*(?:\s+Konsorcjum)?\s*:\s*(?P<v>.+?)\s*,?\s*(?:ul\.|al\.|pl\.|os\.|ulica)'
+              name: "regex:lider_konsorcjum"
+            - regex: '^\s*(?:\d\)\s*)?(?:Lider\w*\s*[:–-]\s*)?(?P<v>.+?)\s*,?\s*(?:ul\.|al\.|pl\.|os\.|ulica)'
+        nip:
+          type: string
+          description: "NIP Odwołującego (10 cyfr, bez kresek i prefiksu PL)."
+          normalize: [nip]
+          validate: [nip_checksum]
+          rules: [{regex: 'NIP\s*:?\s*(?:PL)?\s*(?P<v>\d[\d -]{8,12}\d)'}]
+        regon:
+          type: string
+          description: "REGON Odwołującego (9 lub 14 cyfr)."
+          normalize: [regon]
+          rules: [{regex: 'REGON\s*:?\s*(?P<v>\d{9}(?:\d{5})?)'}]
+        przez-pelnomocnika:
+          type: integer
+          description: "1 jeśli Odwołujący działa przez pełnomocnika, 0 jeśli nie."
+          values: [0, 1]
+          derive: {mode: fill, present: pelnomocnik.imie_nazwisko, then: 1, else: 0}
+        pelnomocnik:
+          type: object
+          fields:
+            imie_nazwisko:
+              type: string
+              description: "Imię i nazwisko PIERWSZEGO wymienionego pełnomocnika Odwołującego (bez tytułu r. pr./adw.)."
+              normalize: [person_name]
+              rules:
+                - regex: 'reprezentowan\w*\s+przez\s*:?\s*(?P<v>(?:(?:r\.\s*pr\.|adw\.|radc\w+\s+prawn\w+|adwokat\w*|mec\.)\s*)?[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?)'
+                - regex: 'pełnomocnik\w*\s*:?\s*(?P<v>(?:(?:r\.\s*pr\.|adw\.)\s*)[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż-]+)'
+            nazwa:
+              type: string
+              description: "Nazwa kancelarii / podmiotu zatrudniającego pełnomocnika (z adresu do korespondencji)."
+              normalize: [company_name]
+              rules:
+                - regex: 'adres\s+do\s+korespondencji\s*:?\s*(?P<v>.+?)\s*,\s*(?:ul\.|al\.|pl\.|os\.)'
+            mail:
+              type: string
+              description: "E-mail kontaktowy pełnomocnika."
+              normalize: [email]
+              rules:
+                - regex: '(?:reprezentowan|adres\s+do\s+korespondencji).*?(?P<v>[\w.+-]+@[\w-]+(?:\.[\w-]+)+)'
+
+  Zamawiajacy:
+    type: list
+    description: "Zamawiający (może być kilku przy wspólnym postępowaniu)."
+    scope:
+      start: '(?-i:Zamawiając\w*)\s*(?:\([^)]*\))?\s*:'
+      end: '(?-i:\bOdwołując\w*\s*(?:\(|:)|\bdotyczy\s*:|\bODWOŁANIE\b|Prezes\w* Krajowej|Krajowa Izba)'
+      required: true
+    split: '(?=\d\)\s*Zamawiający\s*[–-])'
+    items:
+      type: object
+      fields:
+        krs:
+          type: string
+          description: "KRS Zamawiającego (tylko jeśli jawnie podany)."
+          normalize: [krs]
+          rules: [{regex: 'KRS\s*:?\s*(?P<v>\d{10})'}]
+        nazwa:
+          type: string
+          description: "Pełna nazwa Zamawiającego."
+          normalize: [company_name]
+          rules:
+            - regex: '^\s*(?:\d\)\s*Zamawiający[^:]*:\s*)?(?P<v>.+?)\s*,?\s*(?:ul\.|al\.|pl\.|os\.|ulica)'
+        nip:
+          type: string
+          description: "NIP Zamawiającego."
+          normalize: [nip]
+          validate: [nip_checksum]
+          rules: [{regex: 'NIP\s*:?\s*(?:PL)?\s*(?P<v>\d[\d -]{8,12}\d)'}]
+        regon:
+          type: string
+          description: "REGON Zamawiającego."
+          normalize: [regon]
+          rules: [{regex: 'REGON\s*:?\s*(?P<v>\d{9}(?:\d{5})?)'}]
+        prowadzacy_postepowanie:
+          type: integer
+          description: "null gdy jeden zamawiający; przy kilku: 1 = prowadzący/lider postępowania, 0 = pozostali."
+          values: [0, 1]
+          rules:
+            - regex: '^\s*\d\)\s*Zamawiający[^:]*?(?P<v>prowadząc\w*|lider\w*|partner\w*|uczestnik\w*|członek)'
+              map: {'prowadz|lider': 1, '.': 0}
+          derive: {null_if_single_in_list: true, default: 0}
+
+  ZamowieniePubliczne:
+    type: object
+    fields:
+      numer_bzp:
+        type: string
+        description: "Numer ogłoszenia w Biuletynie Zamówień Publicznych, format 'YYYY/BZP########' (bez spacji). NIE numer TED."
+        normalize: [bzp]
+        rules: [{before: 'Działając\s+w\s+imieniu|Zarzut\w*\s+nr|wnoszę\s+o', regex: '(?P<v>\d{4}\s*/\s*BZP\s*\d{6,10}(?:\s*/\s*\d{1,2})?)'}]
+      numer_postepowania:
+        type: string
+        description: "Numer referencyjny / znak sprawy nadany przez Zamawiającego, np. 'ZP.039.2025', 'DZP.260.11.2025'."
+        normalize: [case_number]
+        rules:
+          - before: 'Działając\s+w\s+imieniu|Zarzut\w*\s+nr|wnoszę\s+o'
+            regex: '(?:nr\.?\s+referencyjn\w*(?:\s+sprawy)?|numer\w*\s+referencyjn\w*(?:\s+sprawy)?|znak\w*\s+sprawy|nr\.?\s+sprawy|numer\w*\s+postępowania|nr\.?\s+postępowania|Wewnętrzny identyfikator|sygn\.|postępowani\w*\s+nr\.?|\(nr\.?)\s*:?\s*(?P<v>[A-Za-z0-9][\w./\-]*\d[\w./\-]*)'
+      numer_ted:
+        type: string
+        description: "Numer ogłoszenia w Dz.U. UE (TED) w formacie 'NNNNNN-YYYY'. Zapis '2025/S 123-456789' zamień na '456789-2025'."
+        normalize: [ted]
+        rules:
+          - before: 'Działając\s+w\s+imieniu|Zarzut\w*\s+nr|wnoszę\s+o'
+            regex: '(?:TED|Dzienniku\s+Urzędowym\s+(?:UE|Unii\s+Europejskiej)|Dz\.\s*Urz\.\s*UE|OJ\s*S)[^0-9]{0,40}(?P<v>\d{4}\s*/\s*S\s*\d{1,3}\s*[-–]\s*\d{5,7}|\d{5,7}\s*[-–]\s*\d{4})'
+      tytul:
+        type: string
+        description: "Nazwa (tytuł) zamówienia, zwykle w cudzysłowie po 'pn.'."
+        normalize: [text, strip_quotes, smart_trailing_punct]
+        rules:
+          - before: 'Działając\s+w\s+imieniu|Zarzut\w*\s+nr|wnoszę\s+o'
+            regex: '(?:\bpn\.|\bpod\s+nazwą|\bnazwa\s+zamówienia)\s*:?\s*[„"“](?P<v>[^„”"“]{5,400}?)[”"“]'
+          - regex: '\b(?:na|zamówienia)\s+[„"“](?P<v>[^„”"“]{5,400}?)[”"“]'
