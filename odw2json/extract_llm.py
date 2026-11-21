@@ -75,6 +75,7 @@ class LLMExtractor:
         content = self._post(req)
         parsed = _parse_json(content)
         data = parsed.get("dane", parsed) if self.with_evidence else parsed
+        data = _reshape(dt.schema, data)
         evidence = {}
         for path, quote in (parsed.get("zrodla") or {}).items():
             if isinstance(quote, str) and quote.strip():
@@ -100,6 +101,31 @@ class LLMExtractor:
                 log.warning("LLM HTTP %s – ponawiam za %.0f s (próba %d/%d)", e.code, wait, attempt + 1, self.max_retries)
                 time.sleep(wait)
         raise RuntimeError("LLM: wyczerpano próby")
+
+
+def _reshape(fs, value):
+    """Dopasowuje odpowiedź LLM do struktury schematu z YAML.
+
+    LLM-y lubią „spłaszczać” zagnieżdżone obiekty, np. zamiast
+    mocodawca[].data.{krs, nazwa} zwracają mocodawca[].{krs, nazwa}.
+    Jeśli brakuje obiektu-pola, a jego pola leżą poziom wyżej, przenosimy je na miejsce.
+    Działa dla każdego typu dokumentu (sterowane schematem, bez nazw pól w kodzie).
+    """
+    if fs.type == "list" and fs.items is not None:
+        if isinstance(value, dict):          # pojedynczy obiekt zamiast listy
+            value = [value]
+        return [_reshape(fs.items, v) for v in value] if isinstance(value, list) else value
+    if fs.type != "object" or not isinstance(value, dict):
+        return value
+    out = dict(value)
+    for key, sub in fs.fields.items():
+        if sub.type == "object" and not isinstance(out.get(key), dict):
+            lifted = {k: out.pop(k) for k in list(out) if k in sub.fields and k not in fs.fields}
+            if lifted:
+                out[key] = lifted
+        if key in out:
+            out[key] = _reshape(sub, out[key])
+    return out
 
 
 def _norm(s: str) -> str:
