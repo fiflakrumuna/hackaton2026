@@ -20,6 +20,12 @@ def _get_pipeline():
     return _PIPELINE
 
 
+def reload_pipeline() -> None:
+    """Po dodaniu/usunięciu typu dokumentu – następne przetwarzanie wczyta konfigurację od nowa."""
+    global _PIPELINE
+    _PIPELINE = None
+
+
 def get_available_schemas() -> dict[str, dict]:
     """
     Dynamicznie wczytuje wszystkie definicje dokumentów z folderu schemas/.
@@ -61,24 +67,37 @@ def validate_pdf_bytes(file_bytes: bytes, filename: str) -> None:
         )
 
 
-def process_document(file_bytes: bytes, filename: str) -> dict:
+def get_document_types() -> dict[str, str]:
+    """Typy dokumentów z config/document_types/*.yaml: {id: tytuł} – do wyboru schematu w UI."""
+    try:
+        from odw2json.config import load_config
+        return {dt_id: dt.title or dt_id for dt_id, dt in load_config().document_types.items()}
+    except Exception:
+        return {}
+
+
+def process_document(file_bytes: bytes, filename: str, doc_type: str | None = None) -> dict:
     """
     Główny punkt integracji między UI a logiką AI/OCR.
     Zwraca ustandaryzowany słownik z wynikiem, źródłami i metrykami.
+    ``doc_type`` = None -> automatyczne rozpoznanie typu; inaczej wymuszony schemat.
     """
     start_time = time.perf_counter()
     validate_pdf_bytes(file_bytes, filename)
 
     if USE_MOCK:
         result = _mock_extraction(filename)
+        if doc_type:
+            result["document_type"] = doc_type
     else:
-        result = _real_extraction(file_bytes, filename)
+        result = _real_extraction(file_bytes, filename, doc_type)
 
     elapsed = round(time.perf_counter() - start_time, 2)
 
     # Normalizacja odpowiedzi na wypadek, gdyby model pominął opcjonalne klucze
     return {
         "filename": filename,
+        "manual_type": bool(doc_type),
         "document_type": result.get("document_type", "nieznany"),
         "extracted_json": result.get("extracted_json", {}),
         "sources": result.get("sources", {}),
@@ -86,14 +105,14 @@ def process_document(file_bytes: bytes, filename: str) -> dict:
     }
 
 
-def _real_extraction(file_bytes: bytes, filename: str) -> dict:
+def _real_extraction(file_bytes: bytes, filename: str, doc_type: str | None = None) -> dict:
     """PDF (bajty z uploadu) -> odw2json.Pipeline -> format oczekiwany przez app.py."""
     import tempfile
 
     with tempfile.TemporaryDirectory() as td:
         pdf_path = Path(td) / Path(filename).name
         pdf_path.write_bytes(file_bytes)
-        r = _get_pipeline().process_file(pdf_path)
+        r = _get_pipeline().process_file(pdf_path, doc_type=doc_type)
 
     if r.error:
         raise RuntimeError(r.error.splitlines()[0])

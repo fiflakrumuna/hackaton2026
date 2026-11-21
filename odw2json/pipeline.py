@@ -59,14 +59,21 @@ class Pipeline:
         self.post = Postprocessor(self.cfg)
 
     # ------------------------------------------------------------------ jeden plik
-    def process_file(self, path: str | Path) -> DocumentResult:
+    def process_file(self, path: str | Path, doc_type: str | None = None) -> DocumentResult:
+        """``doc_type`` (opcjonalnie) wymusza typ dokumentu z config/document_types zamiast klasyfikacji."""
         path = Path(path)
         t0 = time.perf_counter()
         timings = {}
         try:
+            if doc_type is not None and doc_type not in self.cfg.document_types:
+                raise ValueError(f"Nieznany typ dokumentu: {doc_type!r} (dostępne: {', '.join(self.cfg.document_types)})")
             doc = self.text_extractor.extract(path)
             timings["text"] = time.perf_counter() - t0
             cls = self.classifier.classify(doc)
+            if doc_type is not None:  # wybór użytkownika (np. w UI) ma pierwszeństwo przed klasyfikatorem
+                auto = cls.doc_type
+                cls = ClassificationResult(doc_type, 1.0, cls.scores, "manual",
+                                           f"Typ wybrany ręcznie (klasyfikator: {auto or 'nierozpoznany'})")
             timings["classify"] = time.perf_counter() - t0 - timings["text"]
             if cls.doc_type is None:
                 return DocumentResult(str(path), None, None, asdict(cls), timings=timings)
