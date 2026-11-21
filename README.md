@@ -1,4 +1,4 @@
-# odw2json: konfiguracja, normalizacja i ewaluacja F1 (część Osoby 3)
+# odw2json
 
 Szkielet aplikacji **Odwołania2json**: PDF → tekst → klasyfikacja → ekstrakcja → normalizacja → JSON.
 Kod Pythona **nie zna nazw pól ani typów dokumentów**. Wszystko opisują pliki YAML w `config/`.
