@@ -14,7 +14,7 @@ pipeline:
     class: odw2json.classify:RuleClassifier
     options:
       head_chars: 3500
-      use_filename: true
+      use_filename: false       # UZP: "nie sugerujcie się nazwą pliku" – klasyfikacja tylko po treści
 
   # Kolejność = priorytet przy scalaniu (pierwsza niepusta wartość wygrywa,
   # chyba że pole w YAML ma `prefer: [...]`). Dopisz LLM na początku listy:

@@ -12,6 +12,9 @@ classification:
     - {pattern: 'rachun\w+\s+(?:odbiorcy|nadawcy|obciążan|uznawan|zleceniodawcy|beneficjenta)|z\s+rachunku', weight: 1}
     - {pattern: 'Nr\s+ref|Numer\s+referencyjny|Numer\s+transakcji', weight: 1}
     - {pattern: 'Kwota|w\s+kwocie', weight: 1}
+    # nagłówki różnych banków: "POTWIERDZENIE TRANSAKCJI", "Potwierdzenie operacji bankowej", "Dowód wykonania przelewu"
+    - {pattern: 'potwierdzeni\w+\s+(?:transakcji|operacji(?:\s+bankowej)?)|dowód\s+(?:wykonania\s+)?(?:przelewu|wpłaty|operacji)', weight: 3}
+    - {pattern: 'Tytułem|Tytuł\s+(?:przelewu|operacji)', weight: 1}
   negative_keywords:
     - {pattern: '(?-i:\bODWOŁANIE\b)', weight: 3}
     - {pattern: '(?-i:PEŁNOMOCNICTWO)', weight: 3}

@@ -83,7 +83,9 @@ def _ocr_page(engine, gray: np.ndarray, cfg: IngestConfig) -> dict:
         f = 1600 / max(gray.shape)
         small = cv2.resize(gray, None, fx=f, fy=f, interpolation=cv2.INTER_AREA) if f < 1 else gray
         rotation = engine.detect_rotation(np.ascontiguousarray(small))
-        candidates = [rotation] if rotation else []
+        # OSD bywa niepewne (np. pewność 1.3 < progu) albo nie działa na małym obrazie –
+        # wtedy próbujemy 180° i zostawiamy wynik tylko, jeśli OCR ma wyższą pewność
+        candidates = [rotation] if rotation else [180]
         if sideways and rotation not in (90, 270):
             candidates = [90, 270]          # OSD niepewne, ale wiemy, że strona leży bokiem
         best_score = -1.0 if sideways else out.confidence

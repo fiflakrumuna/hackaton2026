@@ -9,7 +9,10 @@ classification:
   filename_patterns: ['pe[lł]nomoc']
   filename_weight: 2
   keywords:
-    - {pattern: '(?-i:PEŁNOMOCNICTWO)', weight: 3}
+    # tytuł także rozstrzelonymi literami: "P E Ł N O M O C N I C T W O"
+    - {pattern: '(?-i:P\s?E\s?Ł\s?N\s?O\s?M\s?O\s?C\s?N\s?I\s?C\s?T\s?W\s?O)', weight: 3}
+    - {pattern: '(?-i:\bPełnomocnictwo\b)', weight: 1}
+    - {pattern: 'do\s+reprezentowania', weight: 1}
     - {pattern: 'udziela\w*\s+(?:dalszego\s+)?pełnomocnictwa|ustanawia\w*\s+pełnomocnik|Mocodawc', weight: 2}
     - {pattern: 'Pełnomocnictwo\s+przyjmuję|umocowan', weight: 1}
   negative_keywords:

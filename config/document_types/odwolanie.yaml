@@ -15,7 +15,7 @@ description: >
   czynność lub zaniechanie Zamawiającego w postępowaniu o udzielenie zamówienia publicznego.
 
 classification:
-  min_score: 3
+  min_score: 4             # samo słowo "ODWOŁANIE" (3 pkt) nie wystarcza – broszury/wyroki też je zawierają
   filename_patterns: ['odwo[lł]a']
   filename_weight: 2
   keywords:

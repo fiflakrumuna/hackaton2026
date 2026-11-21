@@ -12,6 +12,54 @@ python evaluate.py --gt ../hacknation-2026/dane --run --label moja_zmiana --comp
 python -m pytest -q                              # 35 testów
 ```
 
+## Szybki start
+
+**Wymagania:** Python 3.13+, [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) z językiem polskim
+(Windows: instalator UB-Mannheim, zaznaczyć *Polish*; macOS: `brew install tesseract tesseract-lang`).
+
+1. Włóż PDF-y do `input/` (mogą być w podfolderach, np. `input/case1/…`).
+2. Uruchom:
+   - Windows: `start.bat` (dwuklik albo z wiersza poleceń),
+   - macOS / Linux: `./start.sh`.
+3. Wyniki są w `output/`, w tej samej strukturze folderów i z tymi samymi nazwami plików co w `input/`.
+   Dokument nierozpoznany (np. ogłoszenie, wyrok) daje pusty plik `.json`.
+
+GUI w przeglądarce (wgranie PDF-ów, podgląd JSON-a i cytatów źródłowych): `start.bat gui` / `./start.sh gui`,
+potem http://localhost:8501.
+
+Skrypty same tworzą `.venv` i instalują `requirements.txt`. Ręcznie: `python -m venv .venv`, aktywacja,
+`python -m pip install -r requirements.txt`, `python main.py`.
+
+## Model językowy (LLM)
+
+| | |
+|---|---|
+| Model | **Qwen3 (`qwen/qwen3.8-27b`)**, otwarte wagi (open source) |
+| Dostęp | API zgodne z OpenAI (`/chat/completions`), bez GPU po stronie aplikacji |
+| Konfiguracja | plik `.env` w głównym folderze (nie trafia do repozytorium): |
+
+```
+LLM_BASE_URL=https://api.groq.com/openai/v1
+LLM_API_KEY=<klucz>
+LLM_MODEL=qwen/qwen3.8-27b
+```
+
+Model można zmienić bez zmian w kodzie: wystarczy inny `LLM_BASE_URL` / `LLM_MODEL` dowolnego dostawcy z API
+zgodnym z OpenAI.
+
+**Jak LLM jest używany:**
+- **Reguły (regex z YAML) i LLM działają razem.** Pola o stałym formacie (daty, NIP, KRS, REGON, numery BZP/TED,
+  rachunki, kwoty) biorą reguły, bo są szybkie i bezbłędne. Dane stron (Odwołujący, Zamawiający, mocodawcy,
+  pełnomocnicy) bierze najpierw LLM (`prefer: [llm, rules]` w YAML), bo układ tych sekcji w prawdziwych pismach
+  i skanach jest bardzo różny.
+- **Prompt i schemat odpowiedzi są generowane z YAML.** Nowe pole lub typ dokumentu nie wymaga zmian w kodzie.
+- **Odpowiedź LLM jest dopasowywana do struktury schematu** (np. gdy model „spłaszczy” zagnieżdżony obiekt)
+  i przechodzi przez tę samą normalizację co reguły.
+- **Transparentność:** LLM zwraca cytat źródłowy dla każdego pola, a aplikacja sprawdza, czy cytat naprawdę jest
+  w dokumencie (`verified`). Cytaty i numery stron widać w GUI i w `--audit`.
+- **Odporność:** przy limicie API (HTTP 429) i błędach serwera zapytanie jest ponawiane. Bez klucza albo przy
+  awarii API aplikacja działa dalej na samych regułach.
+
 ## Wynik bazowy (same reguły, bez LLM, zbiór treningowy, 180 dokumentów)
 
 | | F1 (null ignorowane) | F1 + null |
