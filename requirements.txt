@@ -6,3 +6,4 @@ numpy>=1.26
 pytest>=8.0         # testy
 # OCR: domyślny fallback używa Tesseract CLI (+ pakiet języka 'pol') i pdftoppm (poppler).
 # Docelowy moduł OCR (Osoba 1) może dodać tu np. rapidocr-onnxruntime.
+streamlit>=1.38.0
