@@ -19,6 +19,7 @@ classification:
 schema:
   mocodawca:
     type: list
+    prefer: [llm, rules]      # przypisanie podpisujących do członków konsorcjum – reguły tu słabe
     description: "Podmiot(y) udzielające pełnomocnictwa (przy konsorcjum – każdy członek osobno)."
     scope:                      # przy konsorcjum zawężamy do listy członków; inaczej cały dokument
       start: 'Konsorcj\w*\)?\s*:'
@@ -89,6 +90,7 @@ schema:
 
   pelnomocnicy:
     type: list
+    prefer: [llm, rules]
     description: "Osoby ustanowione pełnomocnikami."
     # pełnomocnik = osoba z tytułem zawodowym (adw./r. pr.); duplikaty z sekcji
     # "Pełnomocnictwo przyjmuję" są usuwane automatycznie

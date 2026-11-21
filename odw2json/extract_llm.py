@@ -14,12 +14,17 @@ więc LLM nie musi idealnie trzymać formatu dat/kwot/NIP-ów.
 from __future__ import annotations
 
 import json
+import logging
 import re
+import time
+import urllib.error
 import urllib.request
 
 from .config import AppConfig, DocumentType
 from .document import ExtractedDocument, ExtractionResult
 from .schema_builder import empty_instance, field_guide, json_schema
+
+log = logging.getLogger("odw2json.llm")
 
 SYSTEM = (
     "Jesteś precyzyjnym systemem ekstrakcji danych z polskich dokumentów zamówień publicznych. "
@@ -41,6 +46,8 @@ class LLMExtractor:
         self.max_chars = max_chars
         self.with_evidence = with_evidence
         self.use_json_schema = use_json_schema
+        self.max_retries = int(llm.get("max_retries", 4))     # ponowienia przy 429 / 5xx
+        self.max_wait_s = float(llm.get("max_wait_s", 60))    # najdłuższe pojedyncze czekanie
 
     def build_messages(self, doc: ExtractedDocument, dt: DocumentType) -> list[dict]:
         skeleton = json.dumps(empty_instance(dt), ensure_ascii=False, indent=1)
@@ -62,9 +69,10 @@ class LLMExtractor:
         else:
             body["response_format"] = {"type": "json_object"}
         req = urllib.request.Request(f"{self.base_url}/chat/completions", data=json.dumps(body).encode(),
-                                     headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"})
-        with urllib.request.urlopen(req, timeout=self.timeout) as r:
-            content = json.loads(r.read())["choices"][0]["message"]["content"]
+                                     headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}",
+                                              # domyślny "Python-urllib" jest blokowany przez Cloudflare (403)
+                                              "User-Agent": "odw2json/1.0"})
+        content = self._post(req)
         parsed = _parse_json(content)
         data = parsed.get("dane", parsed) if self.with_evidence else parsed
         evidence = {}
@@ -74,6 +82,24 @@ class LLMExtractor:
                 found = _norm(quote)[:80] in _norm(doc.text)
                 evidence[path] = {"quote": quote[:300], "page": doc.find_page(quote), "method": "llm", "verified": found}
         return ExtractionResult(data=data, evidence=evidence, method=self.name)
+
+    def _post(self, req: urllib.request.Request) -> str:
+        """Wywołanie API z ponawianiem przy limicie (429) i chwilowych błędach serwera (5xx)."""
+        for attempt in range(self.max_retries + 1):
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                    return json.loads(r.read())["choices"][0]["message"]["content"]
+            except urllib.error.HTTPError as e:
+                if attempt >= self.max_retries or not (e.code == 429 or e.code >= 500):
+                    raise
+                try:
+                    wait = float(e.headers.get("retry-after") or 0)
+                except ValueError:
+                    wait = 0
+                wait = min(max(wait, 2 ** attempt * 5), self.max_wait_s)
+                log.warning("LLM HTTP %s – ponawiam za %.0f s (próba %d/%d)", e.code, wait, attempt + 1, self.max_retries)
+                time.sleep(wait)
+        raise RuntimeError("LLM: wyczerpano próby")
 
 
 def _norm(s: str) -> str:

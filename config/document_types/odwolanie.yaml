@@ -53,6 +53,7 @@ schema:
           - regex: 'Zamawiający\s+w\s+dniu\s+(?P<v>\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4}|\d{1,2}\.\d{1,2}\.\d{4}|\d{4}-\d{2}-\d{2})'
           - regex: 'w\s+dniu\s+(?P<v>\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4}|\d{1,2}\.\d{1,2}\.\d{4}|\d{4}-\d{2}-\d{2})\s*(?:r\.|roku)?\s*Zamawiający'
           - regex: 'dniu\s+(?P<v>\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4}|\d{1,2}\.\d{1,2}\.\d{4})\s*(?:r\.|roku)?[^.]{0,80}(?:poinformował|opublikował|zamieścił|przekazał|udostępnił)'
+          - regex: 'wnoszę\s+odwołanie\s+(?:wobec|od)\b.{0,700}?w\s+dniu\s+(?P<v>\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4}|\d{1,2}\.\d{1,2}\.\d{4})'
       czynnosc_powod_id:
         type: integer
         description: "Identyfikator powodu odwołania 1-12 wg słownika czynnosc_powod, ustalany WYŁĄCZNIE na podstawie pierwszego zarzutu / zaskarżonej czynności."
@@ -61,6 +62,8 @@ schema:
         rules:
           - dictionary: {name: czynnosc_powod, field: id, anchor: 'Zamawiający\s+w\s+dniu', window: 300, sentence: true, anchor_required: true}
           - dictionary: {name: czynnosc_powod, field: id, anchor: 'Zarzut\w*\s+nr\s*1', window: 300}
+          # "wnoszę odwołanie wobec: 1. projektowanych postanowień umowy ..." (okno szersze – po drodze bywa stopka strony)
+          - dictionary: {name: czynnosc_powod, field: id, anchor: 'wnoszę\s+odwołanie\s+(?:wobec|od)', window: 700, anchor_required: true}
       czynnosc_opis:
         type: string
         description: "Kanoniczny opis czynności – zawsze etykieta ze słownika dla czynnosc_powod_id."
@@ -78,10 +81,11 @@ schema:
 
   Odwolujacy:
     type: list
+    prefer: [llm, rules]      # w prawdziwych pismach układ stron jest różny -> LLM; reguły jako zapas
     description: "Wykonawca wnoszący odwołanie (przy konsorcjum – Lider)."
     scope:
       start: '(?-i:Odwołując\w*)\s*(?:\([^)]*\))?\s*:'
-      end: '(?-i:\bZamawiając\w*\s*(?:\(|:)|\bdotyczy\s*:|\bODWOŁANIE\b|Prezes\w* Krajowej|Krajowa Izba)'
+      end: '(?-i:\bZamaw\w{1,4}[ąa]c\w*\s*(?:\(|:)|\bdotyczy\s*:|\bODWOŁANIE\b|Prezes\w* Krajowej|Krajowa Izba)'
       required: true
     items:
       type: object
@@ -97,6 +101,8 @@ schema:
           description: "Pełna nazwa Odwołującego (przy konsorcjum – nazwa Lidera)."
           normalize: [company_name]
           rules:
+            - regex: '(?:\d\)\s*)(?P<v>[^()]+?)\s*\(\s*Lider\w*[^)]*\)'
+              name: "regex:nazwa_(lider_konsorcjum)"
             - regex: 'Lider\w*(?:\s+Konsorcjum)?\s*:\s*(?P<v>.+?)\s*,?\s*(?:ul\.|al\.|pl\.|os\.|ulica)'
               name: "regex:lider_konsorcjum"
             - regex: '^\s*(?:\d\)\s*)?(?:Lider\w*\s*[:–-]\s*)?(?P<v>.+?)\s*,?\s*(?:ul\.|al\.|pl\.|os\.|ulica)'
@@ -124,26 +130,28 @@ schema:
               description: "Imię i nazwisko PIERWSZEGO wymienionego pełnomocnika Odwołującego (bez tytułu r. pr./adw.)."
               normalize: [person_name]
               rules:
-                - regex: 'reprezentowan\w*\s+przez\s*:?\s*(?P<v>(?:(?:r\.\s*pr\.|adw\.|radc\w+\s+prawn\w+|adwokat\w*|mec\.)\s*)?[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?)'
+                - regex: 'reprezentowan\w*\s+przez\s*(?:pełnomocnik\w*\s*)?:?\s*(?P<v>(?:(?:r\.\s*pr\.|adw\.|radc\w+\s+prawn\w+|adwokat\w*|mec\.)\s*)?[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?)'
                 - regex: 'pełnomocnik\w*\s*:?\s*(?P<v>(?:(?:r\.\s*pr\.|adw\.)\s*)[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż-]+)'
             nazwa:
               type: string
               description: "Nazwa kancelarii / podmiotu zatrudniającego pełnomocnika (z adresu do korespondencji)."
               normalize: [company_name]
               rules:
-                - regex: 'adres\s+do\s+korespondencji\s*:?\s*(?P<v>.+?)\s*,\s*(?:ul\.|al\.|pl\.|os\.)'
+                - regex: 'adres\s+do\s+korespondencji\s*:?\s*(?P<v>.+?)\s*,?\s*(?:ul\.|al\.|pl\.|os\.)'
             mail:
               type: string
               description: "E-mail kontaktowy pełnomocnika."
-              normalize: [email]
+              # OCR skanów czyta "@" jako "(O" albo "()" -> zamiana przed walidacją e-maila
+              normalize: [{regex_replace: {pattern: '\(O|\(\)', repl: '@'}}, email]
               rules:
-                - regex: '(?:reprezentowan|adres\s+do\s+korespondencji).*?(?P<v>[\w.+-]+@[\w-]+(?:\.[\w-]+)+)'
+                - regex: '(?:reprezentowan|adres\s+do\s+korespondencji).*?(?P<v>[\w.+-]+(?:@|\(O|\(\))[\w-]+(?:\.[\w-]+)+)'
 
   Zamawiajacy:
     type: list
+    prefer: [llm, rules]
     description: "Zamawiający (może być kilku przy wspólnym postępowaniu)."
     scope:
-      start: '(?-i:Zamawiając\w*)\s*(?:\([^)]*\))?\s*:'
+      start: '(?-i:Zamaw\w{1,4}[ąa]c\w*)\s*(?:\([^)]*\))?\s*:'
       end: '(?-i:\bOdwołując\w*\s*(?:\(|:)|\bdotyczy\s*:|\bODWOŁANIE\b|Prezes\w* Krajowej|Krajowa Izba)'
       required: true
     split: '(?=\d\)\s*Zamawiający\s*[–-])'
