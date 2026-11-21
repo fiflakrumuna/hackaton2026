@@ -3,10 +3,21 @@ import json
 import time
 from pathlib import Path
 
-# Przełącz na False, gdy koledzy dostarczą pliki ocr.py oraz extractor.py
-USE_MOCK = True
+# Tryb demo: ustaw zmienną środowiskową USE_MOCK=1. Domyślnie działa prawdziwy pipeline odw2json.
+USE_MOCK = os.environ.get("USE_MOCK", "0") == "1"
 
 SCHEMAS_DIR = Path(__file__).parent / "schemas"
+
+_PIPELINE = None
+
+
+def _get_pipeline():
+    """Jedna instancja pipeline'u backendu (OCR -> klasyfikacja -> reguły/LLM -> JSON UZP)."""
+    global _PIPELINE
+    if _PIPELINE is None:
+        from odw2json.pipeline import Pipeline
+        _PIPELINE = Pipeline()
+    return _PIPELINE
 
 
 def get_available_schemas() -> dict[str, dict]:
@@ -15,11 +26,21 @@ def get_available_schemas() -> dict[str, dict]:
     Zapewnia rozszerzalność bez modyfikacji kodu (30% oceny w finale).
     """
     schemas = {}
+    # Główne źródło: typy dokumentów z config/document_types/*.yaml (te same, których używa backend)
+    try:
+        from odw2json.config import load_config
+        from odw2json.schema_builder import json_schema
+        for dt_id, dt in load_config().document_types.items():
+            schemas[dt_id] = json_schema(dt)
+    except Exception as e:
+        schemas["config"] = {"error": f"Błąd odczytu config/document_types: {e}"}
+
     if not SCHEMAS_DIR.exists():
-        SCHEMAS_DIR.mkdir(parents=True, exist_ok=True)
         return schemas
 
     for file_path in sorted(SCHEMAS_DIR.glob("*.json")):
+        if file_path.stem in schemas or file_path.stat().st_size == 0:
+            continue
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 schemas[file_path.stem] = json.load(f)
@@ -51,16 +72,7 @@ def process_document(file_bytes: bytes, filename: str) -> dict:
     if USE_MOCK:
         result = _mock_extraction(filename)
     else:
-        # Tutaj wpinasz kod kolegów, gdy będzie gotowy:
-        from ocr import extract_text_from_pdf
-        from extractor import extract_data_with_llm
-
-        pages = extract_text_from_pdf(file_bytes)
-        if not pages or all(not p.get("text", "").strip() for p in pages):
-            raise ValueError(
-                "Nie udało się wyodrębnić tekstu z PDF (pusty dokument lub nieczytelny skan)."
-            )
-        result = extract_data_with_llm(pages)
+        result = _real_extraction(file_bytes, filename)
 
     elapsed = round(time.perf_counter() - start_time, 2)
 
@@ -71,6 +83,32 @@ def process_document(file_bytes: bytes, filename: str) -> dict:
         "extracted_json": result.get("extracted_json", {}),
         "sources": result.get("sources", {}),
         "processing_time_sec": elapsed,
+    }
+
+
+def _real_extraction(file_bytes: bytes, filename: str) -> dict:
+    """PDF (bajty z uploadu) -> odw2json.Pipeline -> format oczekiwany przez app.py."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as td:
+        pdf_path = Path(td) / Path(filename).name
+        pdf_path.write_bytes(file_bytes)
+        r = _get_pipeline().process_file(pdf_path)
+
+    if r.error:
+        raise RuntimeError(r.error.splitlines()[0])
+
+    sources = {
+        path: {"page": ev.get("page"), "quote": ev.get("quote"), "extractor": ev.get("extractor")}
+        for path, ev in (r.evidence or {}).items()
+    }
+    return {
+        # dokument nierozpoznany -> pusty JSON (wymóg UZP)
+        "document_type": r.doc_type or "nierozpoznany",
+        "extracted_json": r.data if r.data is not None else {},
+        "sources": sources,
+        "warnings": r.warnings,
+        "classification": r.classification,
     }
 
 

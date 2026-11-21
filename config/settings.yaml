@@ -3,8 +3,9 @@
 
 pipeline:
   # Osoba 1 podmienia na swój moduł z OCR, np. {class: ocr.engine:HybridExtractor, options: {...}}
+  # pdf_ingest (Osoba 1) przez adapter; przy braku zależności OCR sam wraca do odw2json.text:PdfTextExtractor
   text_extractor:
-    class: odw2json.text:PdfTextExtractor
+    class: odw2json.ingest_adapter:PdfIngestExtractor
     options:
       max_pages: 6            # kluczowe dane są na pierwszych stronach
 
@@ -18,10 +19,13 @@ pipeline:
   # Kolejność = priorytet przy scalaniu (pierwsza niepusta wartość wygrywa,
   # chyba że pole w YAML ma `prefer: [...]`). Dopisz LLM na początku listy:
   #   - {class: llm.extractor:LLMExtractor, options: {model: "${LLM_MODEL:-bielik-11b}"}}
+  # Reguły pierwsze (F1 0.993 na treningu), LLM uzupełnia pola, których reguły nie znalazły.
+  # Bez LLM_BASE_URL/LLM_MODEL w .env ekstraktor LLM po prostu się pomija.
   extractors:
     - class: odw2json.extract_rules:RuleExtractor
+    - class: odw2json.extract_llm:LLMExtractor
 
-llm:                          # wspólne ustawienia dla modułu Osoby 2
+llm:                          # wspólne ustawienia dla modułu Osoby 2 (wartości z .env)
   base_url: ${LLM_BASE_URL:-}
   api_key: ${LLM_API_KEY:-}
   model: ${LLM_MODEL:-}

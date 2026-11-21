@@ -197,7 +197,19 @@ def _parse_doc_type(path: Path, dict_names: set[str]) -> DocumentType:
     )
 
 
+def _load_dotenv(path: Path) -> None:
+    """Wczytuje .env z katalogu projektu (klucz API LLM). Nie nadpisuje istniejących zmiennych."""
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+
 def load_config(root: str | Path | None = None) -> AppConfig:
+    _load_dotenv(Path(__file__).resolve().parent.parent / ".env")
     root = Path(root or os.environ.get("ODW2JSON_CONFIG", Path(__file__).resolve().parent.parent / "config"))
     settings_path = root / "settings.yaml"
     settings = _env_expand(yaml.safe_load(settings_path.read_text(encoding="utf-8"))) if settings_path.exists() else {}
