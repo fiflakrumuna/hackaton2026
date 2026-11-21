@@ -20,6 +20,12 @@ def _get_pipeline():
     return _PIPELINE
 
 
+def reload_pipeline() -> None:
+    """Po dodaniu/usunięciu typu dokumentu – następne przetwarzanie wczyta konfigurację od nowa."""
+    global _PIPELINE
+    _PIPELINE = None
+
+
 def get_available_schemas() -> dict[str, dict]:
     """
     Dynamicznie wczytuje wszystkie definicje dokumentów z folderu schemas/.

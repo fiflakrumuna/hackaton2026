@@ -2,9 +2,14 @@ import json
 import zipfile
 from io import BytesIO
 import streamlit as st
-from pipeline import process_document, get_available_schemas, get_document_types, USE_MOCK
+import pandas as pd
+import yaml
+from pipeline import process_document, get_available_schemas, get_document_types, reload_pipeline, USE_MOCK
+from odw2json.config import ConfigError
+from odw2json import type_builder as tb
 
 AUTO = "__auto__"
+NEW = "__new__"
 
 st.set_page_config(
     page_title="Odwołania2json | UZP KIO",
@@ -27,15 +32,31 @@ with st.sidebar:
     st.caption("Typy dokumentów ładowane dynamicznie z `config/document_types/*.yaml` – nowy typ = nowy plik YAML, bez zmiany kodu.")
 
     doc_types = get_document_types()
-    type_options = [AUTO] + list(doc_types)
+    type_options = [AUTO] + list(doc_types) + [NEW]
+    # po zapisaniu nowego typu w kreatorze – od razu go zaznacz
+    pending = st.session_state.pop("_select_after_save", None)
+    if pending in type_options:
+        st.session_state["doc_type_choice"] = pending
+    if st.session_state.get("doc_type_choice") not in type_options:
+        st.session_state["doc_type_choice"] = AUTO
+
+    def _type_label(t):
+        if t == AUTO:
+            return "🤖 Automatycznie (rozpoznaj typ)"
+        if t == NEW:
+            return "➕ Dodaj nowy typ…"
+        return f"📄 {doc_types[t]}"
+
     selected_type = st.radio(
         "Typ dokumentu:",
         type_options,
-        format_func=lambda t: "🤖 Automatycznie (rozpoznaj typ)" if t == AUTO else f"📄 {doc_types[t]}",
+        key="doc_type_choice",
+        format_func=_type_label,
         help="„Automatycznie” – system sam rozpozna typ każdego pliku. "
-             "Wybór konkretnego typu wymusza jego schemat dla wszystkich wgranych plików.",
+             "Wybór konkretnego typu wymusza jego schemat dla wszystkich wgranych plików. "
+             "„Dodaj nowy typ” – zdefiniuj własny rodzaj dokumentu i jego pola.",
     )
-    forced_type = None if selected_type == AUTO else selected_type
+    forced_type = None if selected_type in (AUTO, NEW) else selected_type
 
     schemas = get_available_schemas()
     if forced_type and forced_type in schemas:
@@ -59,6 +80,126 @@ with st.sidebar:
         "- Brak zależności od GPU\n"
         "- Komponenty 100% Open Source"
     )
+
+# --- KREATOR NOWEGO TYPU DOKUMENTU ---
+def _clean(v) -> str:
+    return "" if v is None or (isinstance(v, float) and v != v) else str(v).strip()
+
+
+def _after_save(type_id: str, path):
+    reload_pipeline()
+    st.session_state["_select_after_save"] = type_id
+    st.session_state["_saved_msg"] = f"✅ Zapisano typ **{type_id}** → `{path}`. Jest już dostępny na liście w panelu bocznym."
+    st.rerun()
+
+
+def render_type_builder():
+    st.header("➕ Nowy typ dokumentu")
+    st.markdown(
+        "Brakuje rodzaju dokumentu, który chcesz przetwarzać (np. **pozew**, **faktura**, **wezwanie**)? "
+        "Zdefiniuj go tutaj. Zostanie zapisany jako plik `config/document_types/<id>.yaml`, "
+        "więc od razu zadziała w interfejsie, w przetwarzaniu wsadowym (`main.py`) i w ewaluacji – bez zmiany kodu."
+    )
+    tab_wiz, tab_yaml, tab_mine = st.tabs(["🧩 Kreator", "📝 Edytor YAML (zaawansowany)", "🗂️ Moje typy"])
+
+    with tab_wiz:
+        c1, c2 = st.columns([2, 1])
+        title = c1.text_input("Nazwa typu dokumentu *", placeholder="np. Pozew o zapłatę")
+        type_id = c2.text_input("Identyfikator", value=tb.slugify(title), help="Nazwa pliku i klucz typu. Tworzy się sam z nazwy.")
+        description = st.text_area("Opis (trafia do promptu LLM)", placeholder="np. Pozew wniesiony do sądu powszechnego o zapłatę należności.", height=70)
+        keywords = st.text_area(
+            "Słowa kluczowe do rozpoznawania *  (jedno w wierszu)",
+            placeholder="POZEW\nPowód:\nPozwany:",
+            help="Frazy, które występują w tym dokumencie. Po nich system automatycznie rozpozna typ pliku. "
+                 "Wielkość liter nie ma znaczenia.",
+            height=100,
+        )
+
+        st.markdown("**Pola do wyodrębnienia** – dodawaj wiersze przyciskiem ➕ pod tabelą.")
+        st.caption(
+            "**Etykieta w dokumencie** (opcjonalnie): tekst stojący przed wartością, np. `Sygn. akt:` – "
+            "wtedy wartość wyciągają szybkie reguły. Bez etykiety pole wypełnia model językowy na podstawie **opisu**."
+        )
+        fields_df = st.data_editor(
+            pd.DataFrame([
+                {"name": "", "kind": "Tekst", "description": "", "label": ""},
+            ]),
+            num_rows="dynamic",
+            use_container_width=True,
+            key="tb_fields",
+            column_config={
+                "name": st.column_config.TextColumn("Nazwa pola *", help="np. Sygnatura akt"),
+                "kind": st.column_config.SelectboxColumn("Rodzaj", options=list(tb.FIELD_KINDS), default="Tekst", required=True),
+                "description": st.column_config.TextColumn("Opis (dla LLM)", width="large"),
+                "label": st.column_config.TextColumn("Etykieta w dokumencie", help="np. Sygn. akt:"),
+            },
+        )
+        fields = [{k: _clean(v) for k, v in row.items()} for row in fields_df.to_dict("records")]
+
+        data, err = None, None
+        try:
+            data = tb.build_doc_type(title, description, keywords.splitlines(), fields, type_id or None)
+        except ConfigError as e:
+            err = str(e)
+
+        b1, b2 = st.columns([1, 3])
+        if b1.button("💾 Zapisz typ", type="primary", use_container_width=True, disabled=data is None):
+            try:
+                _after_save(data["id"], tb.save_doc_type(data))
+            except ConfigError as e:
+                st.error(f"Nie zapisano: {e}")
+        if err and (title or keywords or any(f["name"] for f in fields)):
+            b2.warning(err)
+        if data:
+            with st.expander("👁️ Podgląd pliku YAML, który zostanie zapisany", expanded=False):
+                st.code(tb.to_yaml(data), language="yaml")
+
+    with tab_yaml:
+        st.caption("Pełna kontrola nad definicją typu – ten sam format co pliki w `config/document_types/`. "
+                   "Możesz wkleić lub wgrać gotowy plik.")
+        up = st.file_uploader("Wgraj plik .yaml", type=["yaml", "yml"], key="tb_yaml_upload")
+        example = tb.to_yaml(tb.build_doc_type(
+            "Pozew o zapłatę", "Pozew o zapłatę wniesiony do sądu.", ["POZEW", "Powód:"],
+            [{"name": "Sygnatura akt", "kind": "Tekst", "description": "Sygnatura sprawy", "label": "Sygn. akt:"},
+             {"name": "Wartość przedmiotu sporu", "kind": "Kwota / liczba", "description": "WPS w PLN", "label": "Wartość przedmiotu sporu:"},
+             {"name": "Powód", "kind": "Nazwa firmy", "description": "Nazwa powoda"}]))
+        text = st.text_area("Definicja YAML", value=up.getvalue().decode("utf-8") if up else example, height=380, key="tb_yaml_text")
+        overwrite = st.checkbox("Nadpisz, jeśli typ o tym id już istnieje", value=False)
+        if st.button("✔️ Sprawdź i zapisz", type="primary"):
+            try:
+                d = yaml.safe_load(text)
+                if isinstance(d, dict):
+                    d.setdefault("created_by", tb.USER_MARK)
+                _after_save(d["id"], tb.save_doc_type(d, overwrite=overwrite))
+            except yaml.YAMLError as e:
+                st.error(f"Błąd składni YAML: {e}")
+            except (ConfigError, KeyError, TypeError) as e:
+                st.error(f"Nie zapisano: {e}")
+
+    with tab_mine:
+        mine = tb.user_types()
+        if not mine:
+            st.info("Nie dodano jeszcze żadnego własnego typu.")
+        for tid, ttl in mine.items():
+            c1, c2 = st.columns([4, 1])
+            c1.markdown(f"📄 **{ttl}**  `{tid}`")
+            if c2.button("🗑️ Usuń", key=f"del_{tid}"):
+                try:
+                    tb.delete_user_type(tid)
+                    reload_pipeline()
+                    st.session_state["_saved_msg"] = f"Usunięto typ **{tid}**."
+                    st.rerun()
+                except ConfigError as e:
+                    st.error(str(e))
+        st.caption("Typy wbudowane (odwołanie, pełnomocnictwo, przelew) są chronione – z interfejsu można usuwać tylko typy dodane tutaj.")
+
+
+if "_saved_msg" in st.session_state:
+    st.success(st.session_state.pop("_saved_msg"))
+
+if selected_type == NEW:
+    render_type_builder()
+    st.stop()
 
 # --- GŁÓWNY EKRAN ---
 st.header("📄 Ekstrakcja danych ze sprawy odwoławczej")
