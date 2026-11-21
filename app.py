@@ -2,7 +2,9 @@ import json
 import zipfile
 from io import BytesIO
 import streamlit as st
-from pipeline import process_document, get_available_schemas, USE_MOCK
+from pipeline import process_document, get_available_schemas, get_document_types, USE_MOCK
+
+AUTO = "__auto__"
 
 st.set_page_config(
     page_title="Odwołania2json | UZP KIO",
@@ -21,16 +23,31 @@ with st.sidebar:
     else:
         st.success("🟢 Tryb: **PRODUKCYJNY (OCR + Open-Source LLM)**")
 
-    st.subheader("📂 Konfiguracja klas dokumentów")
-    st.caption("Schematy ładowane dynamicznie z katalogu `schemas/` bez zmiany kodu aplikacji:")
+    st.subheader("📂 Schemat ekstrakcji")
+    st.caption("Typy dokumentów ładowane dynamicznie z `config/document_types/*.yaml` – nowy typ = nowy plik YAML, bez zmiany kodu.")
+
+    doc_types = get_document_types()
+    type_options = [AUTO] + list(doc_types)
+    selected_type = st.radio(
+        "Typ dokumentu:",
+        type_options,
+        format_func=lambda t: "🤖 Automatycznie (rozpoznaj typ)" if t == AUTO else f"📄 {doc_types[t]}",
+        help="„Automatycznie” – system sam rozpozna typ każdego pliku. "
+             "Wybór konkretnego typu wymusza jego schemat dla wszystkich wgranych plików.",
+    )
+    forced_type = None if selected_type == AUTO else selected_type
 
     schemas = get_available_schemas()
-    if schemas:
-        selected_schema = st.selectbox("Podgląd schematu:", list(schemas.keys()))
+    if forced_type and forced_type in schemas:
+        with st.expander(f"Pokaż schemat JSON: {doc_types[forced_type]}", expanded=False):
+            st.json(schemas[forced_type])
+    elif schemas:
+        preview = st.selectbox("Podgląd schematu:", list(schemas.keys()),
+                               format_func=lambda s: doc_types.get(s, s))
         with st.expander("Pokaż definicję JSON", expanded=False):
-            st.json(schemas[selected_schema])
+            st.json(schemas[preview])
     else:
-        st.error("Brak plików .json w folderze schemas/")
+        st.error("Brak typów dokumentów w config/document_types/")
 
     if st.button("🔄 Odśwież schematy"):
         st.rerun()
@@ -61,7 +78,8 @@ if uploaded_files:
     with col_btn:
         run_btn = st.button("🚀 Uruchom ekstrakcję", type="primary", use_container_width=True)
     with col_info:
-        st.info(f"Wybrano plików: **{len(uploaded_files)}**")
+        mode = f"schemat: **{doc_types.get(forced_type, forced_type)}**" if forced_type else "typ rozpoznawany **automatycznie**"
+        st.info(f"Wybrano plików: **{len(uploaded_files)}** · {mode}")
 
     if run_btn:
         results = []
@@ -71,10 +89,11 @@ if uploaded_files:
             with st.status(f"Przetwarzanie: **{file.name}**...", expanded=True) as status:
                 try:
                     file_bytes = file.read()
-                    res = process_document(file_bytes, file.name)
+                    res = process_document(file_bytes, file.name, doc_type=forced_type)
                     results.append(res)
+                    how = "wybrany ręcznie" if res.get("manual_type") else "rozpoznany"
                     status.update(
-                        label=f"✅ **{file.name}** → Typ: `{res['document_type']}` ({res['processing_time_sec']}s)",
+                        label=f"✅ **{file.name}** → Typ ({how}): `{res['document_type']}` ({res['processing_time_sec']}s)",
                         state="complete",
                         expanded=False,
                     )
@@ -148,7 +167,8 @@ if "extraction_results" in st.session_state and st.session_state["extraction_res
 
     for idx, res in enumerate(results):
         with st.expander(
-            f"📄 {res['filename']}  |  Klasa: **{res['document_type'].upper()}**  |  Czas: {res['processing_time_sec']}s",
+            f"📄 {res['filename']}  |  Klasa: **{res['document_type'].upper()}**"
+            f"{' (wybrana ręcznie)' if res.get('manual_type') else ''}  |  Czas: {res['processing_time_sec']}s",
             expanded=True,
         ):
             col_json, col_src = st.columns([1, 1], gap="large")
