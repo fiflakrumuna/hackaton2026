@@ -8,10 +8,12 @@ w formacie wymaganym przez UZP. Działa zarówno na PDF-ach z warstwą tekstową
 
 **Najważniejsze cechy**
 
-- 📄 **Trzy typy dokumentów:** odwołanie, pełnomocnictwo, potwierdzenie przelewu. Dokument nierozpoznany
-  (np. ogłoszenie, wyrok, broszura) daje pusty plik `.json`, zgodnie z wymaganiami UZP.
-- 🧩 **Nowe typy i pola bez zmian w kodzie.** Każdy typ dokumentu to jeden plik YAML w `config/document_types/`.
-  Można go też utworzyć w GUI.
+- 📄 **Typy dokumentów wymagane przez UZP:** odwołanie, pełnomocnictwo, potwierdzenie przelewu. Dokument
+  nierozpoznany (np. ogłoszenie, wyrok, broszura) daje pusty plik `.json`, zgodnie z wymaganiami UZP.
+- ➕ **Własne typy dokumentów bez programowania.** W GUI jest kreator: podajesz nazwę, słowa kluczowe
+  i listę pól (np. pozew, faktura, wezwanie), a nowy typ od razu działa w rozpoznawaniu, ekstrakcji,
+  przetwarzaniu wsadowym i ewaluacji. Każdy typ to jeden plik YAML w `config/document_types/`
+  (zobacz [Dodawanie własnych typów dokumentów](#dodawanie-własnych-typów-dokumentów)).
 - 🔍 **Transparentność.** Dla każdego pola zapisywany jest cytat źródłowy, numer strony i informacja, który
   ekstraktor dał wartość. Cytaty od LLM są sprawdzane, czy naprawdę występują w dokumencie.
 - 🖨️ **Skany.** OCR z językiem polskim, automatyczne obracanie i prostowanie stron, usuwanie czarnych pól
@@ -128,6 +130,7 @@ odw2json/
   extract_rules.py        ekstraktor regułowy sterowany YAML (regex / słownik / scope / split / findall)
   extract_llm.py          ekstraktor LLM (API zgodne z OpenAI), prompt i schemat generowane z YAML
   schema_builder.py       YAML -> JSON Schema, opis pól do promptu, pusty szablon
+  type_builder.py         tworzenie, walidacja i zapis nowych typów dokumentów (kreator w GUI)
   normalize.py            normalizatory (daty, kwoty, NIP, REGON, KRS, rachunki, BZP, TED, nazwy…)
   validators.py           sumy kontrolne NIP/REGON/PESEL/IBAN (ostrzeżenia)
   postprocess.py          normalizacja, walidacja, pola wyliczane, kolejność pól z YAML
@@ -203,9 +206,30 @@ i tam przejmuje je LLM.
 
 ---
 
-## Jak dodać nowe pole albo typ dokumentu (bez kodu)
+## Dodawanie własnych typów dokumentów
 
-Nowe pole w istniejącym typie dopisujemy do sekcji `schema` w YAML:
+Aplikacja nie jest ograniczona do trzech typów z zadania. Nowy typ (i nowe pola) dodaje się **bez zmiany kodu**,
+na jeden z trzech sposobów.
+
+### 1. Kreator w GUI (najprościej)
+
+W panelu bocznym wybierz **„➕ Dodaj nowy typ…”**. Do dyspozycji są trzy zakładki:
+
+| Zakładka | Co robi |
+|---|---|
+| 🧩 **Kreator** | Formularz: nazwa typu, opis (trafia do promptu LLM), słowa kluczowe do rozpoznawania (jedno w wierszu) i tabela pól (nazwa, rodzaj, opis, opcjonalna etykieta w dokumencie, np. `Sygn. akt:`). Rodzaje pól: tekst, data, kwota, liczba całkowita, NIP, REGON, KRS, PESEL, numer rachunku, e-mail. NIP, REGON, PESEL i rachunki są automatycznie normalizowane i sprawdzane sumą kontrolną. Pole z etykietą wypełniają szybkie reguły, pole bez etykiety wypełnia LLM na podstawie opisu. Przed zapisem widać podgląd generowanego YAML. |
+| 📝 **Edytor YAML** | Pełna kontrola nad definicją: wklejenie albo wgranie pliku `.yaml` w tym samym formacie co pliki w `config/document_types/`. Przed zapisem plik jest sprawdzany tym samym walidatorem co przy starcie aplikacji, więc błędny typ nie trafi na dysk. |
+| 🗂️ **Moje typy** | Lista typów dodanych z GUI z możliwością usunięcia. |
+
+Zapisany typ trafia do `config/document_types/<id>.yaml` i od razu działa w GUI, w przetwarzaniu wsadowym
+(`main.py`, `start.bat batch`) i w ewaluacji. W panelu bocznym można też **wymusić typ** dla wgranych plików,
+zamiast rozpoznawać go automatycznie.
+
+Logika kreatora jest w `odw2json/type_builder.py`.
+
+### 2. Nowe pole w istniejącym typie (YAML)
+
+Nowe pole dopisujemy do sekcji `schema` w YAML:
 
 ```yaml
       kwota_wpisu:
@@ -213,6 +237,8 @@ Nowe pole w istniejącym typie dopisujemy do sekcji `schema` w YAML:
         description: "Kwota wpisu od odwołania"        # trafia do promptu LLM i do UI
         rules: [{regex: 'Wpis\s+od\s+odwołania\s*:?\s*(?P<v>[\d ]+,\d{2})'}]
 ```
+
+### 3. Nowy typ dokumentu ręcznie (YAML)
 
 Nowy typ dokumentu to nowy plik, np. `config/document_types/faktura.yaml`:
 
