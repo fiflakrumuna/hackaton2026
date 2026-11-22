@@ -4,7 +4,7 @@ from io import BytesIO
 import streamlit as st
 import pandas as pd
 import yaml
-from pipeline import process_document, get_available_schemas, get_document_types, reload_pipeline, USE_MOCK
+from ui_bridge import process_document, get_available_schemas, get_document_types, reload_pipeline, USE_MOCK
 from odw2json.config import ConfigError
 from odw2json import type_builder as tb
 
@@ -24,7 +24,7 @@ with st.sidebar:
     st.divider()
 
     if USE_MOCK:
-        st.warning("🧪 Tryb: **DEMO (Dane testowe)**\n\nZmień `USE_MOCK = False` w `pipeline.py` po podpięciu modelu.")
+        st.warning("🧪 Tryb: **DEMO (Dane testowe)**\n\nWyłącz, usuwając zmienną środowiskową `USE_MOCK=1`.")
     else:
         st.success("🟢 Tryb: **PRODUKCYJNY (OCR + Open-Source LLM)**")
 

@@ -1,12 +1,12 @@
-"""SZKIELET ekstraktora LLM dla Osoby 2 – API zgodne z OpenAI (/chat/completions).
+"""Ekstraktor LLM – dowolne API zgodne z OpenAI (/chat/completions).
 
-Nie testowany z prawdziwym API (brak klucza w środowisku autora). Pokazuje kontrakt:
-prompt i schemat JSON są generowane z YAML, więc nowy typ dokumentu / nowe pole
-nie wymaga zmian w tym pliku. Włączenie w settings.yaml:
+Prompt i schemat JSON są generowane z YAML, więc nowy typ dokumentu / nowe pole
+nie wymaga zmian w tym pliku. Adres, klucz i model pochodzą z .env
+(LLM_BASE_URL, LLM_API_KEY, LLM_MODEL); włączenie w settings.yaml:
 
     extractors:
-      - {class: odw2json.extract_llm:LLMExtractor}
       - {class: odw2json.extract_rules:RuleExtractor}
+      - {class: odw2json.extract_llm:LLMExtractor}
 
 Wynik przechodzi potem przez tę samą normalizację co reguły (postprocess.py),
 więc LLM nie musi idealnie trzymać formatu dat/kwot/NIP-ów.

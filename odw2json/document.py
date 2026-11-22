@@ -1,6 +1,7 @@
-"""Wspólne struktury danych i interfejsy (kontrakt między członkami zespołu).
+"""Wspólne struktury danych i interfejsy (kontrakt między modułami).
 
-Osoba 1 implementuje ``TextExtractor``, Osoba 2 ``Classifier`` / ``Extractor``.
+Moduł odczytu PDF implementuje ``TextExtractor``, klasyfikator ``Classifier``,
+ekstraktory (reguły, LLM) ``Extractor``.
 Implementacje wskazuje się w ``config/settings.yaml`` ścieżką ``modul:Klasa``,
 więc podmiana silnika OCR albo modelu LLM nie wymaga zmian w pipeline.
 """

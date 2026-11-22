@@ -1,3 +1,8 @@
+"""Łącznik GUI (app.py, Streamlit) z silnikiem ekstrakcji odw2json.
+
+Przyjmuje bajty wgranego PDF-a, uruchamia odw2json.Pipeline i zwraca wynik w formacie
+wygodnym dla interfejsu (typ dokumentu, JSON, cytaty źródłowe, czas przetwarzania).
+"""
 import os
 import json
 import time

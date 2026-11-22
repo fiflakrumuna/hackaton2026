@@ -1,7 +1,7 @@
 """Klasyfikator regułowy – słowa kluczowe i wagi z sekcji ``classification`` w YAML.
 
-Działa bez LLM (szybko, deterministycznie). Osoba 2 może go zastąpić lub
-połączyć z klasyfikatorem LLM (np. LLM tylko gdy ``confidence`` jest niska).
+Działa bez LLM (szybko, deterministycznie). Można go zastąpić innym klasyfikatorem
+(np. LLM tylko gdy ``confidence`` jest niska), wskazując klasę w settings.yaml.
 """
 from __future__ import annotations
 

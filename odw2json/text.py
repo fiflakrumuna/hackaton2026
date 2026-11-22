@@ -1,7 +1,7 @@
 """Domyślny ekstraktor tekstu z PDF: warstwa tekstowa + awaryjny OCR (Tesseract CLI).
 
-To jest implementacja zastępcza – Osoba 1 podmienia ją na docelowy moduł OCR
-(wskazując klasę w settings.yaml -> pipeline.text_extractor). Kontrakt:
+Implementacja zapasowa: domyślnie używany jest pdf_ingest (odw2json.ingest_adapter),
+a ta klasa włącza się, gdy brakuje jego bibliotek (settings.yaml -> pipeline.text_extractor). Kontrakt:
 ``extract(path) -> ExtractedDocument`` (strony z numerem, źródłem i pewnością OCR).
 
 OCR uruchamia się tylko dla stron bez warstwy tekstowej (skany) i tylko dla
