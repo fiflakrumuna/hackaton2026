@@ -5,6 +5,7 @@ scipy>=1.11         # dopasowanie list w ewaluacji (algorytm węgierski); bez ni
 numpy>=1.26
 pytest>=8.0         # testy
 streamlit>=1.38.0
+pandas>=2.2.0
 # OCR (pdf_ingest); wymaga też programu Tesseract z językiem polskim
 # opcjonalnie: rapidocr-onnxruntime jako zapasowy silnik OCR
 pypdfium2>=4.30
