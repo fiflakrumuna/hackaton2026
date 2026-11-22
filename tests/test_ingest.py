@@ -39,7 +39,8 @@ CFG = IngestConfig(cache_dir=None, keep_words=True)
 
 
 def _font(size: int):
-    for f in ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "C:/Windows/Fonts/arial.ttf"]:
+    for f in ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "C:/Windows/Fonts/arial.ttf",
+              "/System/Library/Fonts/Supplemental/Arial.ttf", "/Library/Fonts/Arial.ttf"]:  # macOS
         if Path(f).exists():
             return ImageFont.truetype(f, size)
     return ImageFont.load_default()
@@ -144,7 +145,7 @@ def test_dot_leaders_removed():
 @pytest.mark.skipif(DATA is None, reason="brak danych treningowych UZP")
 def test_all_training_pdfs_are_digital_and_contain_ids():
     import json
-    for case in sorted(DATA.iterdir())[:15]:
+    for case in sorted(DATA.glob("przyklad_*"))[:15]:   # bez folderu negatywne/
         doc = extract_document(case / "odwolanie.pdf", CFG)
         assert doc.doc_kind == "digital"
         assert all(p.source == "text_layer" for p in doc.pages)
@@ -158,7 +159,7 @@ def test_all_training_pdfs_are_digital_and_contain_ids():
 def test_digital_pdf_is_fast():
     import time
     t = time.perf_counter()
-    extract_document(next(iter(sorted(DATA.iterdir()))) / "odwolanie.pdf", CFG)
+    extract_document(sorted(DATA.glob("przyklad_*"))[0] / "odwolanie.pdf", CFG)
     assert time.perf_counter() - t < 2.0
 
 

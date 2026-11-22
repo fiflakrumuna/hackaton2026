@@ -1,4 +1,28 @@
-# Raport jakości ekstrakcji – baseline_reguly
+# Raport jakości ekstrakcji
+
+## Aktualne wyniki (2026-11-21, wersja zintegrowana: OCR + reguły + LLM)
+
+Zbiór treningowy UZP (`hacknation-2026/dane`), porównanie dokładne (`strict`).
+
+| Test | Wynik |
+|---|---|
+| Klasyfikacja **tylko po treści** (bez nazwy pliku), wszystkie PDF-y łącznie z negatywnymi | **196 / 196** poprawnie |
+| Ekstrakcja, same reguły (bez LLM), 180 dokumentów | **micro F1 0.993** (F1+null 0.994) |
+| Ekstrakcja z LLM (Qwen3), próbka 5 spraw / 15 dokumentów | **micro F1 1.000** (te same sprawy bez LLM: 0.991) |
+| Skan prawdziwego odwołania UZP (`szablon-aplikacja`), OCR | pewność OCR 0.93–0.95 na 7 stronach |
+| Skan odwrócony o 180° i przekrzywiony o 3,5° (test syntetyczny) | strona obrócona i wyprostowana, NIP odczytany |
+
+Wnioski:
+- Reguły są bardzo skuteczne na regularnych dokumentach syntetycznych. Na prawdziwych skanach (inny układ stron,
+  literówki OCR, np. „Zamawicjący”, `@` czytane jako `(O`) zawodzą na danych stron. Tam LLM odczytuje poprawnie
+  nazwy Odwołującego i Zamawiającego, gdzie reguły dawały `null` albo fragment sąsiedniego tekstu.
+- Pełny przebieg z LLM na 180 dokumentach nie był wykonany z powodu limitu darmowego API (8000 tokenów/min).
+
+Poniżej szczegółowy raport bazowy (same reguły).
+
+---
+
+## Raport bazowy – baseline_reguly
 
 Data: 2026-11-21T12:51:44 · tryb porównania: `strict` · dokumentów: 180
 

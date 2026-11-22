@@ -1,3 +1,10 @@
+"""Samodzielna demonstracja wywołania LLM (klasyfikacja + ekstrakcja) na pliku tekstowym.
+
+Nie jest częścią aplikacji – właściwy ekstraktor LLM to odw2json/extract_llm.py
+(prompt i schemat generowane z config/document_types/*.yaml).
+Użycie: tekst dokumentu w tools/odwolanie.txt, klucz GROQ_API_KEY w .env, potem
+    python tools/llm_api_demo.py
+"""
 import json
 import os
 import requests

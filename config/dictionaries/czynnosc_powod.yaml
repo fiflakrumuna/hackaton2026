@@ -39,6 +39,6 @@ entries:
     label: "Opis przedmiotu zamówienia (OPZ)"
     patterns: ['Opis\w* Przedmiotu Zamówienia', '\bOPZ\b']
   - id: 12
-    # TODO: brak przykładu w zbiorze treningowym – dopytać mentorów UZP o brzmienie etykiety
-    label: "Inna czynność lub zaniechanie zamawiającego"
-    patterns: []
+    # brzmienie wg oficjalnego słownika UZP (oczekiwane-json/czynnosc_powod_id_dict.md)
+    label: "Projektowane postanowienia umowy"
+    patterns: ['projektowan\w* postanowie\w* umowy', '\bPPU\b']

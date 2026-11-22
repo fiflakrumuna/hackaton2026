@@ -2,30 +2,28 @@
 # Wartości ${ZMIENNA:-domyślna} są czytane ze zmiennych środowiskowych (klucze API poza repo).
 
 pipeline:
-  # Osoba 1 podmienia na swój moduł z OCR, np. {class: ocr.engine:HybridExtractor, options: {...}}
-  # pdf_ingest (Osoba 1) przez adapter; przy braku zależności OCR sam wraca do odw2json.text:PdfTextExtractor
+  # Odczyt PDF: warstwa tekstowa + OCR skanów (moduł pdf_ingest przez adapter).
+  # Przy braku bibliotek OCR adapter sam przełącza się na odw2json.text:PdfTextExtractor.
   text_extractor:
     class: odw2json.ingest_adapter:PdfIngestExtractor
     options:
       max_pages: 6            # kluczowe dane są na pierwszych stronach
 
-  # Osoba 2 może podpiąć klasyfikator LLM (np. jako fallback przy niskiej pewności)
+  # Klasyfikacja typu dokumentu po treści (słowa kluczowe i wagi z config/document_types/*.yaml).
   classifier:
     class: odw2json.classify:RuleClassifier
     options:
       head_chars: 3500
-      use_filename: true
+      use_filename: false       # UZP: "nie sugerujcie się nazwą pliku" – klasyfikacja tylko po treści
 
-  # Kolejność = priorytet przy scalaniu (pierwsza niepusta wartość wygrywa,
-  # chyba że pole w YAML ma `prefer: [...]`). Dopisz LLM na początku listy:
-  #   - {class: llm.extractor:LLMExtractor, options: {model: "${LLM_MODEL:-bielik-11b}"}}
-  # Reguły pierwsze (F1 0.993 na treningu), LLM uzupełnia pola, których reguły nie znalazły.
-  # Bez LLM_BASE_URL/LLM_MODEL w .env ekstraktor LLM po prostu się pomija.
+  # Ekstraktory. Kolejność = domyślny priorytet przy scalaniu (pierwsza niepusta wartość wygrywa).
+  # Pole lub lista może to zmienić w YAML przez `prefer: [...]` – np. dane stron: `prefer: [llm, rules]`.
+  # Bez LLM_BASE_URL / LLM_MODEL w .env ekstraktor LLM się pomija i działają same reguły.
   extractors:
     - class: odw2json.extract_rules:RuleExtractor
     - class: odw2json.extract_llm:LLMExtractor
 
-llm:                          # wspólne ustawienia dla modułu Osoby 2 (wartości z .env)
+llm:                          # ustawienia ekstraktora LLM (wartości z .env)
   base_url: ${LLM_BASE_URL:-}
   api_key: ${LLM_API_KEY:-}
   model: ${LLM_MODEL:-}

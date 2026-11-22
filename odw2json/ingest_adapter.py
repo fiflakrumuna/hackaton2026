@@ -1,4 +1,4 @@
-"""Łącznik: moduł OCR Osoby 1 (pdf_ingest) -> kontrakt backendu (ExtractedDocument).
+"""Łącznik: moduł OCR (pdf_ingest) -> kontrakt backendu (ExtractedDocument).
 
 Włączenie w config/settings.yaml:
     text_extractor: {class: odw2json.ingest_adapter:PdfIngestExtractor}

@@ -1,4 +1,4 @@
-"""Generowanie artefaktów ze schematu YAML – dla Osoby 2 (LLM) i Osoby 4 (UI).
+"""Generowanie artefaktów ze schematu YAML – dla ekstraktora LLM i interfejsu (UI).
 
 * ``build_pydantic_model(doc_type)`` – dynamiczny model Pydantic (np. do Instructor /
   Structured Outputs). Pola z myślnikiem (``przez-pelnomocnika``) obsługiwane aliasem.
